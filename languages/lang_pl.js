@@ -1,4 +1,4 @@
-if (loggen) console.log('%cPL połączone', CSS['green']);
+if (loggen) console.log('%cPL połączone', CSS_Style.green);
 
 lang_use = 'pl';
 

@@ -1,4 +1,4 @@
-if (loggen) console.log('%cEN included', CSS['green']);
+if (loggen) console.log('%cEN included', CSS_Style.green);
 
 lang_use = 'en';
 

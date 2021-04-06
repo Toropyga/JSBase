@@ -1,4 +1,4 @@
-if (loggen) console.log('%cDE verbunden', CSS['green']);
+if (loggen) console.log('%cDE verbunden', CSS_Style.green);
 
 lang_use = 'de';
 

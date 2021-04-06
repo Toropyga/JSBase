@@ -1,4 +1,4 @@
-if (loggen) console.log('%cRU подключено', CSS['green']);
+if (loggen) console.log('%cRU подключено', CSS_Style.green);
 
 lang_use = 'ru';
 

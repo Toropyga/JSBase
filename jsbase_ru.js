@@ -5,57 +5,57 @@
  * Version: 3.0.2
  */
 //  +---------------------------------------+
-//  |              Description              |
+//  |                Описание               |
 //  +---------------------------------------+
 
 /**
- * A set of basic functions for JavaScript
+ * Набор базовых функций для JavaScript
  *
- * The functions use the loggen variable (true/false),
- * responsible for displaying information about the progress in the console and
- * the results of the functions. It is declared in the body of the script.
- * See "Global Variables"
+ * В функциях используется переменная loggen (true/false),
+ * ответственная за вывод в консоль информации о ходе и
+ * результатах работы функций. Объявляется в теле скрипта.
+ * См. "Глобальные переменные"
  *
- * For the creation and correct operation of the visual block "Loading"
- * global variable bg is used
+ * Для создания и корректной работы визуального блока "Загрузка"
+ * используется глобальная переменная bg
  *
- * For the functions to work correctly, you need to connect the JQuery library
- * The latest version of jQuery is located at: https://jquery.com
+ * Для корректной работы функций необходимо подключить библиотеку JQuery
+ * Последняя версия JQuery находится по адресу: https://jquery.com
  */
 
 //  +---------------------------------------+
-//  |            Global Variables           |
-//  |  (for the scripts to work correctly)  |
+//  |         Глобальные переменные         |
+//  |    (для корректной работы скриптов)   |
 //  +---------------------------------------+
 
-let loggen              = false;                // output of information about the operation of functions to the console yes/no (1/0 or true/false)
-let animation_time      = 2500;                 // time in ms for animation
-let default_url         = './index.php';        // the URL to which the default form data is send
-let default_method      = 'POST';               // default method used for data transfer (GET/POST)
-let default_type        = 'json';               // the default data type used when sending data to the server
-let default_id          = 'content';            // ID of the default block in which the AJAX response is output after submitting the form
-let bg                  = {};                   // the object being created that displays the data loading animation
-let show_loader         = true;                 // display or not animation for data loading
-let no_history          = 0;                    // write or not the transition to the browser history (0 - write, 1 - not write)
+let loggen              = false;                // вывод информации о работе функций в консоль да/нет (1/0 или true/false)
+let animation_time      = 2500;                 // время в мс на анимацию
+let default_url         = './index.php';        // URL, на который передаются данные формы по умолчанию
+let default_method      = 'POST';               // метод по умолчанию, используемый для передачи данных (GET/POST)
+let default_type        = 'json';               // тип данных по умолчанию, используемый при передаче данных на сервер
+let default_id          = 'content';            // ID блока по умолчанию в который выводится ответ AJAX после отправки формы
+let bg                  = {};                   // создаваемый объект, отображающий анимацию загрузки данных
+let show_loader         = true;                 // отображать или нет анимацию загрузки данных
+let no_history          = 0;                    // записывать или нет переход в историю браузера (0 - записывать, 1 - не записывать)
 
-let cookie_domain       = 'localhost';          // current domain for cookies
-let cookie_path         = '/';                  // path for cookies
-let cookie_expires      = 600;                  // lifetime for cookies
-let cookie_secure       = true;                 // cookies are transmitted over a secure protocol yes/no (1/0 or true/false)
-let cookie_simesite     = 'Lax';                // cross-site interaction
-                                                // «Strict» — a complete ban on sending cookies to third-party sites.
-                                                // «Lax» — some cookies are blocked for cross-site requests (images or iframes).
-                                                // «None» — no restrictions on cookies .
-// language settings
-let dir_local           = '/languages/';   	    // the default path to the directory (folder) where the language JS files are located
-let file_local          = 'lang_';              // default language JS file name prefix
-let default_lang        = 'ru';                 // default language file
-let language            = [];                   // language array
-let lang_use            = 'en';                 // default language
+let cookie_domain       = 'localhost';          // текущий домен для куки
+let cookie_path         = '/';                  // путь к куки
+let cookie_expires      = 600;                  // время жизни куки
+let cookie_secure       = true;                 // куки передаются по защищённому протоколу да/нет (1/0 или true/false)
+
+let cookie_simesite     = 'Lax';                // «Strict» — полный запрет на отправку Cookie сторонним сайтам.
+                                                // «Lax» — блокируются некоторые Cookie для запросов между сайтами (изображения или iframe).
+                                                // «None» — ограничения на файлы Cookie отсутствуют.
+// языковые настройки скрипта
+let dir_local           = '/languages/';   	// путь по умолчанию к директории (папке) в которой расположены языковые JS файлы
+let file_local          = 'lang_';              // префикс имени языковых JS файлов по умолчанию
+let default_lang        = 'ru';                 // языковой файл по умолчанию
+let language            = [];                   // языковой массив
+let lang_use            = 'en';                 // используемый язык
 let lang_key            = '';
-let send_status         = false;                // data sending status
+let send_status         = false;                // статус отправки данных
 
-// console CSS style
+// стилевое оформление консоли
 let CSS_Style                 = {
     'h1': 'font: bold 16px Arial; color: #ff0dff;',
     'h2': 'font: bold 14px Arial; color: #ff0dff;',
@@ -70,21 +70,21 @@ let CSS_Style                 = {
     'orange': 'color: #ef9e00;',
     'clear': 'font: Arial;'
 };
-let css_confirm         = true;                 // use the style of the Confirm dialog of the MyConfirm function built into the script
+let css_confirm         = true;                 // использовать встроенный в скрипт стиль оформления диалога Confirm функции MyConfirm()
 
-let show_hide           = [];                   // an array containing information about the object to which the ShowHide function is applied and what state it is in
-show_hide.count         = 0;                    // triggers count of function ShowHide
+let show_hide           = [];                   // массив, содержащий информацию об объекте к которому применяется функция ShowHide и в каком состоянии он находится
+show_hide.count         = 0;                    // количество сработок функции
 
 //  +---------------------------------------+
-//  |          Base functions block         |
+//  |          Блок базовых функций         |
 //  +---------------------------------------+
 
 /**
- * Checking the completeness of the form before saving
- * Validation is carried out by the presence of the "required" parameter in the form field
- * If there is an error, the cursor moves to the field containing the error
- * @param name - form ID
- * @return {boolean} true - there are errors, false - no errors
+ * Проверка полноты заполнения формы перед сохранением
+ * Проверка осуществляется по наличию параметра required в поле формы
+ * Если есть ошибка, то курсор перемещается на поле, содержащее ошибку
+ * @param name - ID формы
+ * @return {boolean} true - есть ошибки, false - ошибок нет
  */
 function checkRequired(name) {
     if (loggen) {
@@ -123,11 +123,11 @@ function checkRequired(name) {
 }
 
 /**
- * Form fields verification before saving
- * The verification is carried out for compliance with the regular expression specified in the pattern parameter
- * If there is an error, the cursor moves to the field containing the error
- * @param name - form ID
- * @return {boolean} true - there are errors, false - no errors
+ * Проверка правильности заполнения полей формы перед сохранением
+ * Проверка осуществляется на соответствие регулярному выражению, указанному в параметре pattern
+ * Если есть ошибка, то курсор перемещается на поле, содержащее ошибку
+ * @param name - ID формы
+ * @return {boolean} true - есть ошибки, false - ошибок нет
  */
 function checkPattern(name) {
     if (loggen) {

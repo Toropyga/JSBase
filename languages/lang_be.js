@@ -1,4 +1,4 @@
-if (loggen) console.log('%cBE падлучана', CSS['green']);
+if (loggen) console.log('%cBE падлучана', CSS_Style.green);
 
 lang_use = 'be';
 
