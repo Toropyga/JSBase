@@ -1,6 +1,6 @@
 /**
  * JavaScript functions
- * Author: Yuri Frantsevich (FYN)
+ * @author: Yuri Frantsevich (FYN)
  * Email: frantsevich@gmail.com | fyn@tut.by
  * Version: 3.0.2
  */
