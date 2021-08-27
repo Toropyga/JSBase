@@ -1329,7 +1329,7 @@ function includeJS(url) {
  */
 function getLanguage (str, include) {
     // настройка функции
-    let use_net_query = true;                            // использовать или нет AJAX-запрос к серверу
+    let use_net_query = false;                           // использовать или нет AJAX-запрос к серверу (не работает сервер)
     let server = 'https://ajaxhttpheaders3.appspot.com'; // адрес внешнего сервера
     let data_type = 'jsonp';                             // тип данных, получаемых от сервера
     let include_local = true;                            // настройка подключения языковых файлов по умолчанию
