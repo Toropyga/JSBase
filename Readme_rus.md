@@ -1,4 +1,7 @@
 # JSBase
+![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-v1.0.3-blue.svg)
+
 Набор базовых функций для JavaScript
 
 В функциях используется переменная loggen (true/false), ответственная за вывод в консоль информации о ходе и результатах работы функций. Объявляется в теле скрипта (см. блок "Глобальные переменные").

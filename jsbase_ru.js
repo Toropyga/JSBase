@@ -2131,8 +2131,10 @@ function ShowHide (id, type, time) {
         }
         else {
             if (document.getElementById(id)) {
-                if (type === 'show') document.getElementById(id).style.display = 'block';
-                else document.getElementById(id).style.display = 'none';
+                let element = document.getElementById(id);
+                let isVisible = element.offsetWidth > 0 || element.offsetHeight > 0;
+                if (isVisible) document.getElementById(id).style.display = 'none';
+                else document.getElementById(id).style.display = 'block';
             }
         }
         // небольшой костыль для того, чтобы продолжал работать после перезагрузки меню по AJAX
