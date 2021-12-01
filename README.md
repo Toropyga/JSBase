@@ -1,7 +1,9 @@
 # JSBase
-A set of basic functions for JavaScript
+![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-v1.0.3-blue.svg)
+![js_badge](https://img.shields.io/badge/Functions-JavaScript-yellow)
 
-<!-- [![js_badge](https://img.shields.io/badge/Functions-JavaScript-yellow)](https://en.wikipedia.org/wiki/JavaScript) -->
+A set of basic functions for JavaScript
 
 The functions use the loggen variable (true / false), which is responsible for displaying information about the progress and results of the functions to the console. It is declared in the body of the script (see the "Global Variables" section).
 
