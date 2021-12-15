@@ -2,7 +2,7 @@
  * JavaScript functions
  * @author: Yuri Frantsevich (FYN)
  * Email: frantsevich@gmail.com | fyn@tut.by
- * Version: 3.0.2
+ * Version: 3.0.3
  */
 //  +---------------------------------------+
 //  |                Описание               |
@@ -380,7 +380,7 @@ function sendForm (name, id, back, url, method, type) {
     // если к url надо добавить ещё какие либо дополнительные параметры,
     // указываем их в переменной param
     // например: let param = 'param_1=value_1&param_2=value_2';
-    let param = 'js=1';
+    let param = 'js='+getKeyDay();
 
     if (loggen) {
         console.group("sendForm");
@@ -690,7 +690,7 @@ function getPageID (name, id, method, type) {
     // если к url надо добавить ещё какие либо дополнительные параметры,
     // указываем их в переменной param
     // например: let param = 'param_1=value_1&param_2=value_2';
-    let param = 'js=1';
+    let param = 'js='+getKeyDay();
     if (loggen) {
         console.group("getPageID");
         console.time("getPageID");
@@ -937,7 +937,7 @@ function getPageURL (url, id, method, type) {
     // если к url надо добавить ещё какие либо дополнительные параметры,
     // указываем их в переменной param
     // например: let param = 'param_1=value_1&param_2=value_2';
-    let param = 'js=1';
+    let param = 'js='+getKeyDay();
     if (loggen) {
         console.group("getPageURL");
         console.time("getPageURL");
@@ -2111,7 +2111,7 @@ function keyCheck (e) {
  * Показать или спрятать объект на странице
  * @param id - ID блока
  * @param type - что сделать с блоком: hide - спрятать, show - показать, по умолчанию или toggle - определить состояние и в зависимости от этого спрятать или показать
- * @param time - время анимации в милисекундах, может принимать значения "slow" и "fast"
+ * @param time - время анимации в миллисекундах, может принимать значения "slow" и "fast"
  * @constructor
  */
 function ShowHide (id, type, time) {
@@ -2131,10 +2131,14 @@ function ShowHide (id, type, time) {
         }
         else {
             if (document.getElementById(id)) {
-                let element = document.getElementById(id);
-                let isVisible = element.offsetWidth > 0 || element.offsetHeight > 0;
-                if (isVisible) document.getElementById(id).style.display = 'none';
-                else document.getElementById(id).style.display = 'block';
+                if (type === 'toggle') {
+                    let element = document.getElementById(id);
+                    let isVisible = element.offsetWidth > 0 || element.offsetHeight > 0;
+                    if (isVisible) document.getElementById(id).style.display = 'none';
+                    else document.getElementById(id).style.display = 'block';
+                }
+                else if (type === 'show') document.getElementById(id).style.display = 'block';
+                else if (type === 'hide') document.getElementById(id).style.display = 'none';
             }
         }
         // небольшой костыль для того, чтобы продолжал работать после перезагрузки меню по AJAX
@@ -2142,6 +2146,109 @@ function ShowHide (id, type, time) {
         show_hide['id'] = id;
         show_hide['type'] = type;
     }
+}
+
+/**
+ * Генерация ключа
+ * @returns {*}
+ */
+function getKeyDay() {
+    let code = 'bNbCode';
+    let dateToday = new Date();
+    let myDay = dateToday.getDate();
+    let myMonth = dateToday.getMonth()+1;
+    let myYear = dateToday.getFullYear();
+    let str = myYear+''+myMonth+''+myDay+''+code;
+    return MD5(b64EncodeUnicode(str));
+}
+
+/**
+ * Смена раскладки клавиатуры с латиницы на кириллицу
+ * @param str
+ * @returns {*}
+ * @constructor
+ */
+function changeKeyboard ( str ) {
+    let replacer = {
+        "q":"й", "w":"ц", "e":"у", "r":"к", "t":"е", "y":"н", "u":"г",
+        "i":"ш", "o":"щ", "p":"з", "[":"х", "]":"ъ", "a":"ф", "s":"ы",
+        "d":"в", "f":"а", "g":"п", "h":"р", "j":"о", "k":"л", "l":"д",
+        ";":"ж", "'":"э", "z":"я", "x":"ч", "c":"с", "v":"м", "b":"и",
+        "n":"т", "m":"ь", ",":"б", ".":"ю", "/":".", ":":"Ж", '"':"Э",
+        "{":"Х", "}":"Ъ", ">":"Ю", "<":"Б", "~":"Ё"
+    };
+    return str.replace(/[A-z\/\,\.;\'\]\[\{\}><\~:]/g, function ( x ){
+        const reg = new RegExp('[A-Z]+');
+        if (reg.test(x)) {
+            return  replacer[ x.toLowerCase() ].toUpperCase();
+        }
+        else return replacer[ x ]
+    });
+}
+
+/**
+ * Функции для расчёта MD5
+ * @param d
+ * @returns {string}
+ * @constructor
+ */
+let MD5 = function(d) {
+    d = unescape(encodeURIComponent(d));
+    let result = M(V(Y(X(d), 8 * d.length)));
+    return result.toLowerCase();
+};
+function M(d) {
+    let _ = '';
+    let m, f, r;
+    for (_, m = "0123456789ABCDEF", f = "", r = 0; r < d.length; r++) _ = d.charCodeAt(r), f += m.charAt(_ >>> 4 & 15) + m.charAt(15 & _);
+    return f
+}
+function X(d) {
+    let _ = '';
+    let m;
+    for ( _ = Array(d.length >> 2), m = 0; m < _.length; m++) _[m] = 0;
+    for (m = 0; m < 8 * d.length; m += 8) _[m >> 5] |= (255 & d.charCodeAt(m / 8)) << m % 32;
+    return _
+}
+function V(d) {
+    let _ = '';
+    let m;
+    for ( _ = "", m = 0; m < 32 * d.length; m += 8) _ += String.fromCharCode(d[m >> 5] >>> m % 32 & 255);
+    return _
+}
+function Y(d, _) {
+    d[_ >> 5] |= 128 << _ % 32, d[14 + (_ + 64 >>> 9 << 4)] = _;
+    let m, f, r, i, n;
+    for (m = 1732584193, f = -271733879, r = -1732584194, i = 271733878, n = 0; n < d.length; n += 16) {
+        let h = m,
+            t = f,
+            g = r,
+            e = i;
+        f = md5_ii(f = md5_ii(f = md5_ii(f = md5_ii(f = md5_hh(f = md5_hh(f = md5_hh(f = md5_hh(f = md5_gg(f = md5_gg(f = md5_gg(f = md5_gg(f = md5_ff(f = md5_ff(f = md5_ff(f = md5_ff(f, r = md5_ff(r, i = md5_ff(i, m = md5_ff(m, f, r, i, d[n + 0], 7, -680876936), f, r, d[n + 1], 12, -389564586), m, f, d[n + 2], 17, 606105819), i, m, d[n + 3], 22, -1044525330), r = md5_ff(r, i = md5_ff(i, m = md5_ff(m, f, r, i, d[n + 4], 7, -176418897), f, r, d[n + 5], 12, 1200080426), m, f, d[n + 6], 17, -1473231341), i, m, d[n + 7], 22, -45705983), r = md5_ff(r, i = md5_ff(i, m = md5_ff(m, f, r, i, d[n + 8], 7, 1770035416), f, r, d[n + 9], 12, -1958414417), m, f, d[n + 10], 17, -42063), i, m, d[n + 11], 22, -1990404162), r = md5_ff(r, i = md5_ff(i, m = md5_ff(m, f, r, i, d[n + 12], 7, 1804603682), f, r, d[n + 13], 12, -40341101), m, f, d[n + 14], 17, -1502002290), i, m, d[n + 15], 22, 1236535329), r = md5_gg(r, i = md5_gg(i, m = md5_gg(m, f, r, i, d[n + 1], 5, -165796510), f, r, d[n + 6], 9, -1069501632), m, f, d[n + 11], 14, 643717713), i, m, d[n + 0], 20, -373897302), r = md5_gg(r, i = md5_gg(i, m = md5_gg(m, f, r, i, d[n + 5], 5, -701558691), f, r, d[n + 10], 9, 38016083), m, f, d[n + 15], 14, -660478335), i, m, d[n + 4], 20, -405537848), r = md5_gg(r, i = md5_gg(i, m = md5_gg(m, f, r, i, d[n + 9], 5, 568446438), f, r, d[n + 14], 9, -1019803690), m, f, d[n + 3], 14, -187363961), i, m, d[n + 8], 20, 1163531501), r = md5_gg(r, i = md5_gg(i, m = md5_gg(m, f, r, i, d[n + 13], 5, -1444681467), f, r, d[n + 2], 9, -51403784), m, f, d[n + 7], 14, 1735328473), i, m, d[n + 12], 20, -1926607734), r = md5_hh(r, i = md5_hh(i, m = md5_hh(m, f, r, i, d[n + 5], 4, -378558), f, r, d[n + 8], 11, -2022574463), m, f, d[n + 11], 16, 1839030562), i, m, d[n + 14], 23, -35309556), r = md5_hh(r, i = md5_hh(i, m = md5_hh(m, f, r, i, d[n + 1], 4, -1530992060), f, r, d[n + 4], 11, 1272893353), m, f, d[n + 7], 16, -155497632), i, m, d[n + 10], 23, -1094730640), r = md5_hh(r, i = md5_hh(i, m = md5_hh(m, f, r, i, d[n + 13], 4, 681279174), f, r, d[n + 0], 11, -358537222), m, f, d[n + 3], 16, -722521979), i, m, d[n + 6], 23, 76029189), r = md5_hh(r, i = md5_hh(i, m = md5_hh(m, f, r, i, d[n + 9], 4, -640364487), f, r, d[n + 12], 11, -421815835), m, f, d[n + 15], 16, 530742520), i, m, d[n + 2], 23, -995338651), r = md5_ii(r, i = md5_ii(i, m = md5_ii(m, f, r, i, d[n + 0], 6, -198630844), f, r, d[n + 7], 10, 1126891415), m, f, d[n + 14], 15, -1416354905), i, m, d[n + 5], 21, -57434055), r = md5_ii(r, i = md5_ii(i, m = md5_ii(m, f, r, i, d[n + 12], 6, 1700485571), f, r, d[n + 3], 10, -1894986606), m, f, d[n + 10], 15, -1051523), i, m, d[n + 1], 21, -2054922799), r = md5_ii(r, i = md5_ii(i, m = md5_ii(m, f, r, i, d[n + 8], 6, 1873313359), f, r, d[n + 15], 10, -30611744), m, f, d[n + 6], 15, -1560198380), i, m, d[n + 13], 21, 1309151649), r = md5_ii(r, i = md5_ii(i, m = md5_ii(m, f, r, i, d[n + 4], 6, -145523070), f, r, d[n + 11], 10, -1120210379), m, f, d[n + 2], 15, 718787259), i, m, d[n + 9], 21, -343485551), m = safe_add(m, h), f = safe_add(f, t), r = safe_add(r, g), i = safe_add(i, e)
+    }
+    return Array(m, f, r, i)
+}
+function md5_cmn(d, _, m, f, r, i) {
+    return safe_add(bit_rol(safe_add(safe_add(_, d), safe_add(f, i)), r), m)
+}
+function md5_ff(d, _, m, f, r, i, n) {
+    return md5_cmn(_ & m | ~_ & f, d, _, r, i, n)
+}
+function md5_gg(d, _, m, f, r, i, n) {
+    return md5_cmn(_ & f | m & ~f, d, _, r, i, n)
+}
+function md5_hh(d, _, m, f, r, i, n) {
+    return md5_cmn(_ ^ m ^ f, d, _, r, i, n)
+}
+function md5_ii(d, _, m, f, r, i, n) {
+    return md5_cmn(m ^ (_ | ~f), d, _, r, i, n)
+}
+function safe_add(d, _) {
+    let m = (65535 & d) + (65535 & _);
+    return (d >> 16) + (_ >> 16) + (m >> 16) << 16 | 65535 & m
+}
+function bit_rol(d, _) {
+    return d << _ | d >>> 32 - _
 }
 
 addEventListener("keyup", keyCheck);
