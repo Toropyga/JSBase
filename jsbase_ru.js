@@ -2,7 +2,7 @@
  * JavaScript functions
  * @author: Yuri Frantsevich (FYN)
  * Email: frantsevich@gmail.com | fyn@tut.by
- * Version: 3.0.3
+ * Version: 3.1.0
  */
 //  +---------------------------------------+
 //  |                Описание               |
@@ -1221,6 +1221,7 @@ function includeJS(url) {
  *          str = srv.HTTP_ACCEPT_LANGUAGE;
  *          (в данном случае переменная srv содержит все Headers (заголовки) браузера доступные в PHP)
  * @param include - подключать или нет языковые файлы (true/false)
+ * @param cookie_name - имя cookie, содержащее языковой параметр
  *
  * --------------------------------------+
  * СПРАВОЧНИК СОКРАЩЕНИЙ (КОДОВ) ЯЗЫКОВ: |
@@ -1327,11 +1328,8 @@ function includeJS(url) {
  * --------------------------------------+
  * @return array - массив, упорядоченный по ключам, где по ключу "0" - первый язык (код языка) браузера, "1" - второй и т.д.
  */
-function getLanguage (str, include) {
+function getLanguage (str, include, cookie_name) {
     // настройка функции
-    let use_net_query = false;                           // использовать или нет AJAX-запрос к серверу (не работает сервер)
-    let server = 'https://ajaxhttpheaders3.appspot.com'; // адрес внешнего сервера
-    let data_type = 'jsonp';                             // тип данных, получаемых от сервера
     let include_local = true;                            // настройка подключения языковых файлов по умолчанию
     // регулярные выражения
     let lng_str;
@@ -1381,72 +1379,29 @@ function getLanguage (str, include) {
     }
     // если в строке данные не передавались
     else {
-        if (use_net_query) {
-            // используем запрос к внешнему серверу
-            if (loggen) console.log("Begin query to URL: %c"+server, CSS_Style.blue);
-            $.ajax({
-                url:      server,
-                dataType: data_type,
-                success: function (headers) {
-                    // обрабатываем ответ от внешнего сервера
-                    lng_str = headers['Accept-Language'];
-                    lng_array_1 = lng_str.split(reg_1);
-                    for (lng_str in lng_array_1) {
-                        lng_array_2 = lng_array_1[lng_str].split(reg_2);
-                        l_key = lng_array_2[0];
-                        l_key = l_key.replace(reg_4, '');
-                        l_val = lng_array_2[1]?lng_array_2[1]:"1";
-                        if (typeof(l_val) === 'string') l_val = l_val.replace(reg_3, '');
-                        lng_nm[l_key] = (10-(l_val*10));
-                    }
-                    for (l_key in lng_nm) {
-                        l_val = lng_nm[l_key];
-                        lng_vl[l_val] = l_key;
-                    }
-                    for (l_key in lng_vl) {
-                        lng[i] = lng_vl[l_key];
-                        i++;
-                    }
-                    if (loggen) console.log("%cURL query success", CSS_Style.green);
-                    // подключаем файлы
-                    if (include === true || (include !== false && include_local)) includeLanguage(lng);
-                }
-            }).done(function () {
-                Loader(true);
-                if (loggen) {
-                    console.log("%cDone", CSS_Style.orange);
-                    console.timeEnd("getLanguage");
-                    console.groupEnd();
-                }
-            }).fail(function () {
-                if (loggen) console.warn("URL query fail");
-                lng_str = (window.navigator.language || window.navigator.browserLanguage);
-                lng_str = lng_str.substr(0, 2).toLowerCase();
-                lng[0] = lng_str;
-                if (loggen) console.info("Use local parameters");
-                // подключаем файлы
-                if (include === true || (include !== false && include_local)) includeLanguage(lng);
-                Loader(true);
-                if (loggen) {
-                    console.log("%cDone", CSS_Style.orange);
-                    console.timeEnd("getLanguage");
-                    console.groupEnd();
-                }
-            });
+        // используем локальные параметры
+        if (loggen) console.info("Use local parameters");
+        if (!cookie_name) cookie_name = 'this_site_language';
+        let cookie_lng = getCookie(cookie_name);
+        if (loggen) {
+            console.info("Check cookie: "+cookie_name);
+            console.info("Cookie lng: "+cookie_lng);
         }
-        else {
-            // используем локальные параметры
-            if (loggen) console.info("Use local parameters");
-            lng_str = (window.navigator.language || window.navigator.browserLanguage);
-            lng_str = lng_str.substr(0, 2).toLowerCase();
-            lng[0] = lng_str;
-            if (include === true || (include !== false && include_local)) includeLanguage(lng);
-            Loader(true);
-            if (loggen) {
-                console.log("%cDone", CSS_Style.orange);
-                console.timeEnd("getLanguage");
-                console.groupEnd();
-            }
+        lng_str = (window.navigator.language || window.navigator.browserLanguage);
+        if (loggen) console.log("Local: %c"+lng_str, CSS_Style.orange);
+        lng_str = lng_str.substr(0, 2).toLowerCase();
+        if (cookie_lng) {
+            lng[0] = cookie_lng;
+            if (lng_str != cookie_lng) lng[1] = lng_str;
+        }
+        else lng[0] = lng_str;
+
+        if (include === true || (include !== false && include_local)) includeLanguage(lng);
+        Loader(true);
+        if (loggen) {
+            console.log("%cDone", CSS_Style.orange);
+            console.timeEnd("getLanguage");
+            console.groupEnd();
         }
     }
     return lng;
@@ -1802,14 +1757,7 @@ function checkBrowser() {
     let vendorName = winNav.vendor;
     if (this.isIE && !winNav.userAgent.indexOf("rv:")) this.isIE = false;
     else if (!this.isIE && !this.isChrome && !this.isChromium && !this.isFF && !this.isIEedge && !this.isSafari && !this.isOpera && winNav.userAgent.indexOf("rv:")) this.isIE = true;
-    if (this.isChrome !== null && typeof this.isChrome !== "undefined" && vendorName === "Google Inc." && this.isOpera === false && this.isIEedge === false) {
-        if (isWithChromePDFReader()) {
-            this.isChrome = true;
-        } else {
-            this.isChrome = false;
-            this.isChromium = true;
-        }
-    }
+    if (this.isChrome !== null && typeof this.isChrome !== "undefined" && vendorName === "Google Inc." && this.isOpera === false && this.isIEedge === false) this.isChrome = true;
     this.isMS = (this.isIE || this.isIEedge || this.isMSIE)?true:false; // Продукт от Microsoft
     if (this.isOpera) {
         this.browser = 'Opera';
@@ -1835,26 +1783,11 @@ function checkBrowser() {
         this.browser = 'Chrome';
         this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("Chrome/")+7),4);
     }
-    else if (this.isChromium) {
-        this.browser = 'Chromium';
-        this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("Chrome/")+7),4);
-    }
     else if (this.isSafari) {
         this.browser = 'Safari';
         this.version = 4;
     }
     return this;
-}
-
-/**
- * Вспомогательная функция для определения Chromium
- * @return {boolean}
- */
-function isWithChromePDFReader() {
-    for (let i = 0; i < window.navigator.plugins.length; i++) {
-        if (window.navigator.plugins[i].name == 'Chrome PDF Viewer') return true;
-    }
-    return false;
 }
 
 /**

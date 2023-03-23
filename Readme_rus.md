@@ -1,6 +1,6 @@
 # JSBase
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
-![Version](https://img.shields.io/badge/version-v1.0.4-blue.svg)
+![Version](https://img.shields.io/badge/version-v3.1.0-blue.svg)
 ![js_badge](https://img.shields.io/badge/Functions-JavaScript-yellow)
 
 Набор базовых функций для JavaScript
