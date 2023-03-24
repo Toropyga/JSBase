@@ -1330,7 +1330,8 @@ function includeJS(url) {
  */
 function getLanguage (str, include, cookie_name) {
     // настройка функции
-    let include_local = true;                            // настройка подключения языковых файлов по умолчанию
+    let include_local = true;                           // настройка подключения языковых файлов по умолчанию
+    let delete_cookie = true;                           // удалять временные языковые куки
     // регулярные выражения
     let lng_str;
     let reg_1 = /,/;
@@ -1383,6 +1384,7 @@ function getLanguage (str, include, cookie_name) {
         if (loggen) console.info("Use local parameters");
         if (!cookie_name) cookie_name = 'this_site_language';
         let cookie_lng = getCookie(cookie_name);
+        if (delete_cookie) deleteCookie(cookie_name);
         if (loggen) {
             console.info("Check cookie: "+cookie_name);
             console.info("Cookie lng: "+cookie_lng);
