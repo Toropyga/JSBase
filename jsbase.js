@@ -595,7 +595,7 @@ function sendForm (name, id, back, url, method, type) {
         }).done(function () {
             send_status = true;
             // всё отработало хорошо
-            state = { 'page_id': name, 'content_id': id, 'function': 'sendForm', 'url': url, 'data': dt };
+            state = { 'page_id': name, 'content_id': id, 'function': 'sendForm', 'url': url, 'data': [] };
             if (loggen) {
                 console.log("%cSave to browser history:", CSS_Style.h3);
                 console.table({'state': state});
