@@ -1365,7 +1365,7 @@ function getLanguage (str, include, cookie_name) {
             l_key = l_key.replace(reg_4, '');
             l_val = lng_array_2[1]?lng_array_2[1]:"1";
             if (typeof(l_val) === 'string') l_val = l_val.replace(reg_3, '');
-            lng_nm[l_key] = (10-(l_val*10));
+            if (!lng_nm[l_key]) lng_nm[l_key] = (10-(l_val*10));
         }
         for (l_key in lng_nm) {
             l_val = lng_nm[l_key];
