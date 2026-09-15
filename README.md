@@ -1,6 +1,6 @@
 # JSBase
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
-![Version](https://img.shields.io/badge/version-v3.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-v3.2.1-blue.svg)
 ![js_badge](https://img.shields.io/badge/Functions-JavaScript-yellow)
 
 JSBase is a browser-side collection of form validation, AJAX navigation, language selection, cookies, dialogs, and small DOM helpers. It requires jQuery to be loaded before `jsbase.js` or `jsbase_ru.js`.
@@ -11,7 +11,7 @@ Include jQuery first, then the required JSBase variant:
 
 ```html
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="/jsbase.js"></script>
+<script src="/src/jsbase.js"></script>
 ```
 
 Set the global configuration variables before use when the defaults do not match your application. Important values include `default_url`, `default_id`, `default_method`, `dir_local`, and the cookie options. Set `loggen` to `true` to enable diagnostic messages in the browser console.

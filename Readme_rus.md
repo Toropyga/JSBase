@@ -1,6 +1,6 @@
 # JSBase
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
-![Version](https://img.shields.io/badge/version-v3.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-v3.2.1-blue.svg)
 ![js_badge](https://img.shields.io/badge/Functions-JavaScript-yellow)
 
 JSBase - браузерный набор функций для проверки форм, AJAX-навигации, выбора языка, cookie, диалогов и небольших DOM-утилит. До `jsbase.js` или `jsbase_ru.js` необходимо подключить jQuery.
@@ -11,7 +11,7 @@ JSBase - браузерный набор функций для проверки 
 
 ```html
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="/jsbase_ru.js"></script>
+<script src="/src/jsbase_ru.js"></script>
 ```
 
 При необходимости до начала работы переопределите глобальные настройки: `default_url`, `default_id`, `default_method`, `dir_local` и параметры cookie. Для вывода диагностических сообщений в консоль установите `loggen = true`.

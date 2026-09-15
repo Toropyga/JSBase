@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-09-15
+
+### Changed
+
+- Moved all source files into the `src/` directory (`jsbase.js`, `jsbase_ru.js`, `languages/`).
+- Updated `README.md` and `README_rus.md` include examples to reference the new `src/` path.
+
 ## [3.2.0] - 2026-09-15
 
 ### Added
@@ -40,5 +47,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Updated the `ShowHide` function.
 
+[3.2.1]: https://github.com/toropyga/JSBase/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/toropyga/JSBase/compare/v3.1.2...v3.2.0
 [3.1.2]: https://github.com/toropyga/JSBase/releases/tag/v3.1.2
