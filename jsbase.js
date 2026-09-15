@@ -2,7 +2,7 @@
  * JavaScript functions
  * @author: Yuri Frantsevich (FYN)
  * Email: frantsevich@gmail.com | fyn@tut.by
- * Version: 3.1.2
+ * Version: 3.2.0
  */
 //  +---------------------------------------+
 //  |              Description              |
@@ -54,6 +54,7 @@ let language            = [];                   // language array
 let lang_use            = 'en';                 // default language
 let lang_key            = '';
 let send_status         = false;                // data sending status
+let response_handlers   = {};
 
 // console CSS style
 let CSS_Style                 = {
@@ -175,12 +176,12 @@ function checkPattern(name) {
 }
 
 /**
- * Генерация объекта "Ожидание загрузки" (Loading)
- * Деактивирует/активирует страницу в ожидании загрузки данных
- * Объект bg объявляется глобально в теле скрипта
+ * Creates the "Loading" object
+ * Deactivates/activates the page while data is loading
+ * The bg object is declared globally in the script body
  * -----------------------------------------------------------
- * Важен CSS-стиль для отображения
- * Пример CSS:
+ * The CSS style is required for display
+ * CSS example:
  *      .loading {
  *          border: 10px solid #f3f3f3;
  *          border-top: 10px solid #23475F;
@@ -230,7 +231,7 @@ function checkPattern(name) {
  *          100% { opacity: 0.8; }
  *      }
  * -----------------------------------------------------------
- * @param stop - если передан параметр (true, !=0), то удаляет объект и активирует страницу
+ * @param stop - if a parameter is provided (true, !=0), removes the object and activates the page
  * @return {boolean} true
  */
 function Loader(stop) {
@@ -256,8 +257,8 @@ function Loader(stop) {
                     console.time("Loader");
                     console.log("Loader: %cSTART", CSS_Style.green);
                 }
-                // создание объекта
-                // стили см. в описании к функции
+                // create the object
+                // see the function description for styles
                 bg = document.createElement('div');
                 bg.innerHTML = '<div class="loading"><div class="lin"></div></div>';
                 bg.className = 'load';
@@ -273,11 +274,11 @@ function Loader(stop) {
 }
 
 /**
- * Отображение информационного блока и переданного текста
- * @param text - отображаемый текст
- * @param time - время отображения блока
- * @param style - стилевой класс для блока
- * Возможный стиль для класса alert:
+ * Displays an information block and the supplied text
+ * @param text - text to display
+ * @param time - block display time
+ * @param style - CSS class for the block
+ * Possible style for the alert class:
  *  .alert {
  *      position: fixed;
  *      min-width: 200px;
@@ -297,6 +298,7 @@ function Loader(stop) {
  */
 function showAlert (text, time, style) {
     if (!style) style = 'alert';
+    if (!/^[A-Za-z0-9_-]+$/.test(style)) style = 'alert';
     if (!time) time = animation_time;
     if (loggen) {
         console.group("showAlert");
@@ -307,7 +309,7 @@ function showAlert (text, time, style) {
     }
     let div = document.createElement('div');
     div.className = style;
-    div.innerHTML = text;
+    div.textContent = text;
     document.body.appendChild(div);
     setTimeout(function() {
         div.parentNode.removeChild(div);
@@ -320,12 +322,61 @@ function showAlert (text, time, style) {
     return false;
 }
 
+function registerResponseHandler(name, handler) {
+    if (typeof name !== 'string' || typeof handler !== 'function') return false;
+    response_handlers[name] = handler;
+    return true;
+}
+
+function runResponseHandler(script) {
+    if (!script || typeof script.function !== 'string') return false;
+    let handler = response_handlers[script.function];
+    if (typeof handler !== 'function') return false;
+    let args = Array.isArray(script.args) ? script.args : [];
+    setTimeout(function () {
+        handler.apply(null, args);
+    }, animation_time / 5);
+    return true;
+}
+
+function getSafeNavigationUrl(value) {
+    try {
+        let url = new URL(value, window.location.origin);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+    }
+    catch (error) {
+        return null;
+    }
+}
+
+function getSafeScriptUrl(value) {
+    let url = getSafeNavigationUrl(value);
+    return url && new URL(url).origin === window.location.origin ? url : null;
+}
+
+function setResponseContent(element, value) {
+    let content = value == null ? '' : String(value);
+    let sanitized = window.DOMPurify ? window.DOMPurify.sanitize(content) : null;
+    if (element.jquery) {
+        if (sanitized !== null) element.html(sanitized);
+        else element.text(content);
+    }
+    else if (sanitized !== null) element.innerHTML = sanitized;
+    else element.textContent = content;
+}
+
+function escapeHtml(value) {
+    let element = document.createElement('div');
+    element.textContent = value == null ? '' : String(value);
+    return element.innerHTML;
+}
+
 /**
- * AJAX функция передачи данных из формы по ID
- * Выполняется проверка полноты и правильности заполнения
- * Все параметры по умолчанию прописываются в блоке "Глобальные переменные"
+ * AJAX function for submitting form data by ID
+ * Validates that fields are complete and correctly filled in
+ * All default parameters are specified in the "Global Variables" block
  *
- * Пример:
+ * Example:
  * <div id="content">
  * <form id="form_id" action="./?page=page_id" method="post" onsubmit="return sendForm(this.id, 'content');">
  *     <input ....>
@@ -333,53 +384,53 @@ function showAlert (text, time, style) {
  * </form>
  * </div>
  *
- * или в JS-функции
+ * or in a JS function
  *
  * if (sendForm('form_id', 'content', true) {
  *      document.location = '/';
  * }
  *
  * +--------------------------------------------------+
- * |              Передаваемые параметры              |
+ * |              Input parameters                   |
  * +--------------------------------------------------+
- * @param name  -   ID формы
- * @param id    -   ID блока вывода ответа, если не указан, то параметр по умолчанию
- * @param back  -   какой ответ возвращает функция (по умолчанию - false):
- *                      true - если нет ошибок вернёт true, в противном случае - false
- *                      false - всегда вернёт false
- * @param type  -   тип данных, используемый при передаче данных на сервер (json или jsonp), если отсутствует, то тип по умолчанию
+ * @param name  -   form ID
+ * @param id    -   response output block ID; uses the default parameter if omitted
+ * @param back  -   the response returned by the function (false by default):
+ *                      true - returns true when there are no errors; otherwise, false
+ *                      false - always returns false
+ * @param type  -   data type used to send data to the server (json or jsonp); uses the default type if omitted
  *
- * -- необязательные параметры, которые можем получить из формы или, если отсутствуют, из переменных по умолчанию
- * @param url       -   URL на который передаём
- * @param method    -   метод, используемый для передачи данных (GET/POST)
+ * -- optional parameters that may come from the form or, if missing, from the default variables
+ * @param url       -   destination URL
+ * @param method    -   method used to send data (GET/POST)
  *
  * +--------------------------------------------------+
- * |             Возвращаемые параметры               |
+ * |             Returned parameters                  |
  * +--------------------------------------------------+
- * Сервер может возвращать массив данных со следующими ключами:
- *          error {boolean}     -   наличие ошибки
- *          alert {string}      -   текст информационного сообщения или ошибки
- *          html {string}       -   HTML-текст для вывода на экран
- *          url {string}        -   URL на который надо перенаправить (происходит переход на указанный URL)
- *          no_error {boolean}  -   не отображать (true) или отображать сообщение об ошибке
- *          set_url {string}    -   адрес, который устанавливается в адресной строке браузера
- *          title {string}      -   новый заголовок страницы (<title>...</title>)
- *          script {string}     -   script, который надо выполнить по итогу (объект, содержащий два ключа: 'arg' и 'function', где 'arg' - аргументы функции, а 'function' - имя функции. Например, 'arg' => '"text", true', 'function' => 'initEditor')
+ * The server may return a data array with the following keys:
+ *          error {boolean}     -   an error occurred
+ *          alert {string}      -   informational or error message text
+ *          html {string}       -   HTML text to display
+ *          url {string}        -   URL to redirect to (navigates to the specified URL)
+ *          no_error {boolean}  -   do not show (true) or show the error message
+ *          set_url {string}    -   address set in the browser address bar
+ *          title {string}      -   new page title (<title>...</title>)
+ *          script {object}     -   registered response handler to run afterward. Contains 'function' and an 'args' array. For example, { function: 'initEditor', args: ['text', true] }
  *
- * В возвращаемом массиве могут быть и иные данные в следующем формате: {key_id => html_text}, где
- *          key_id {string}     -   ID блока на странице, в котором будет заменёно содержимое,
- *          html_text {string}  -   HTML-текст, который отобразится в блоке с идентификатором key_id
+ * The returned array may also contain other data in this format: {key_id => html_text}, where
+ *          key_id {string}     -   ID of the page block whose content will be replaced,
+ *          html_text {string}  -   HTML text displayed in the block with the key_id identifier
  *
  * @returns {boolean}
  */
 function sendForm (name, id, back, url, method, type) {
-    let show_error = true;      // отобразить ли сообщение об ошибке если сервер вернул ошибку
-    //let is_json = true;         // получаемый ответ в формате JSON
-    let use_animation = true;   // использовать ли анимацию при смене страниц
+    let show_error = true;      // whether to display an error message if the server returns an error
+    //let is_json = true;         // response received in JSON format
+    let use_animation = true;   // whether to use animation when switching pages
     send_status = false;
-    // если к url надо добавить ещё какие либо дополнительные параметры,
-    // указываем их в переменной param
-    // например: let param = 'param_1=value_1&param_2=value_2';
+    // if additional parameters need to be added to the URL,
+    // specify them in the param variable
+    // for example: let param = 'param_1=value_1&param_2=value_2';
     let param = 'js='+getKeyDay();
 
     if (loggen) {
@@ -387,7 +438,7 @@ function sendForm (name, id, back, url, method, type) {
         console.time("sendForm");
         console.log("Form ID: %c" + name, CSS_Style.green);
     }
-    // проверяем наличие формы по переданному ID
+    // check whether a form with the specified ID exists
     if (!document.getElementById(name)) {
         if (loggen) {
             console.timeEnd("sendForm");
@@ -396,9 +447,9 @@ function sendForm (name, id, back, url, method, type) {
         }
         return false;
     }
-    // вешаем заставку
+    // show the loading overlay
     Loader();
-    // проверяем наличие блока вывода по переданному ID
+    // check whether an output block with the specified ID exists
     let output = true;
     if (!id) {
         id = default_id;
@@ -429,14 +480,14 @@ function sendForm (name, id, back, url, method, type) {
         }
         return false;
     }
-    // устанавливаем значение по умолчанию для ответа
+    // set the default response value
     if (!back) back = false;
-    // формируем ссылку на объект формы
+    // create a reference to the form object
     let form = $("#"+name);
-    // определяем метод передачи данных
+    // determine the data transfer method
     if (!method) method = form.attr('method');
     if (!method) method = default_method;
-    // определяем URL
+    // determine the URL
     if (!url) url = form.attr('action');
     if (!url) url = default_url;
     let newurldata = url;
@@ -452,27 +503,27 @@ function sendForm (name, id, back, url, method, type) {
         if (loggen) console.log("New URL: %c"+url, CSS_Style.green);
     }
     else url = newurldata;
-    // определяем заголовок
+    // determine the title
     let title = 'Form';
-    // определяем тип данных
+    // determine the data type
     if (!type) type = default_type;
-    // производим проверку на обязательность заполнения полей
+    // check whether required fields are completed
     let error = checkRequired(name);
-    // проводим проверку на правильность заполнения
+    // check whether fields are filled in correctly
     if (!error) error = checkPattern(name);
-    // создаём объект перехода по ссылке для истории браузера
+    // create a navigation state object for browser history
     let state = {};
     let script = {};
     let run_script  = 0;
-    // начинаем отправку формы
+    // begin submitting the form
     if (!error) {
         $("#"+name).each(function(){ $(this).removeClass('error_filed'); });
         if (loggen) console.log("Begin sending to url: %c"+url, CSS_Style.blue);
-        let dt;                                                             // передаваемыее данные
+        let dt;                                                             // data to send
         let c_type = "application/x-www-form-urlencoded; charset = UTF-8";  // content type
         let p_data = true;                                                  // process data
         let cache = true;
-        // если форма может содержать передачу файлов, то устанавливаем дополнительные параметры
+        // if the form can include file uploads, set additional parameters
         if (form.attr('enctype') == 'multipart/form-data') {
             if (loggen) console.log("Send form %c"+name, CSS_Style.green);
             dt = new FormData(document.getElementById(name));
@@ -500,40 +551,49 @@ function sendForm (name, id, back, url, method, type) {
             processData:    p_data,
             dataType:       type,
             success: function (data) {
-                // результат работы
+                // result
                 if (loggen) {
                     console.log("%cReturn data:", CSS_Style.h3);
                     console.table(data);
                 }
-                // сервер вернул ошибку
+                // the server returned an error
                 if (data.error) {
                     if (loggen) console.warn("ERROR return from server!");
                     if (!data.no_error && show_error) {
                         let txt = (data.alert)?data.alert:'ERROR return from server!';
                         showAlert(txt, (animation_time*2));
                     }
+                    back = false;
                 }
-                // с сервера пришло информационное сообщение
+                // the server returned an informational message
                 else if (data.alert) {
                     if (loggen) console.info("Show alert from server");
                     showAlert(data.alert, (animation_time*2));
                 }
-                // пришло перенаправление на URL
+                // a URL redirect was returned
                 if (data.url) {
-                    if (loggen) console.info("Go to URL: "+data.url);
-                    document.location.href = data.url;
-                    return true;
+                    let safeUrl = getSafeNavigationUrl(data.url);
+                    if (safeUrl) {
+                        if (loggen) console.info("Go to URL: "+safeUrl);
+                        document.location.href = safeUrl;
+                        return true;
+                    }
+                    if (loggen) console.warn("Unsafe redirect URL rejected");
                 }
-                // с сервера пришёл HTML-текст
+                // the server returned HTML text
                 if (data.html) {
                     if (output) {
                         if (loggen) console.log("Write HTML from server");
-                        document.getElementById(id).innerHTML = data.html;
+                        setResponseContent(document.getElementById(id), data.html);
                     }
                 }
-                // перебор переданного массива (объекта) данных
+                if (data.show_hide && data.sh_type) {
+                    if (loggen) console.info("ShowHide "+data.show_hide);
+                    ShowHide(data.show_hide, data.sh_type);
+                }
+                // iterate over the returned data array (object)
                 for (let key in data) {
-                    if (key === 'error' || key === 'script' || key === 'alert' || key === 'set_url' || key === 'no_error' || key === 'html' || key === 'title' || key === 'error_field') continue;
+                    if (key === 'error' || key === 'script' || key === 'alert' || key === 'set_url' || key === 'show_hide' || key === 'sh_type' || key === 'no_error' || key === 'html' || key === 'title' || key === 'error_field') continue;
                     if (!document.getElementById(key)) {
                         if (loggen) console.warn("ID %c"+key+"%c not found!", CSS_Style.orange, CSS_Style.clear);
                         continue;
@@ -543,7 +603,7 @@ function sendForm (name, id, back, url, method, type) {
                         if (loggen) console.log("Set animation text for %c"+key, CSS_Style.green);
                         let value = data[key];
                         /*
-                        //Альтернатива
+                        // Alternative
                         new_obj.stop().fadeTo("slow", 0, function () {
                             new_obj.html(value);
                             new_obj.stop().fadeTo("slow", 1);
@@ -552,7 +612,7 @@ function sendForm (name, id, back, url, method, type) {
                         let type = new_obj.get(0).tagName.toLowerCase();
                         new_obj.fadeOut("slow", function () {
                             if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                            else new_obj.html(value);
+                            else setResponseContent(new_obj, value);
                             new_obj.fadeIn("slow");
                         });
                     }
@@ -561,7 +621,7 @@ function sendForm (name, id, back, url, method, type) {
                         if (loggen) console.log("Set static text for ID: %c" + key, CSS_Style.green);
                         let type = new_obj.get(0).tagName.toLowerCase();
                         if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                        else new_obj.html(value);
+                        else setResponseContent(new_obj, value);
                     }
                 }
                 if (data.set_url) newurldata = data.set_url;
@@ -570,12 +630,13 @@ function sendForm (name, id, back, url, method, type) {
                     run_script = 1;
                     script = data.script;
                 }
-                // выделяем поле ошибки
+                // highlight the error field
                 if (data.error_field) {
                     let fld = $("[name='"+data.error_field+"']");
                     let info = fld.offset();
                     fld.focus().addClass("error_field");
                     setTimeout(function () {window.scrollTo(info['left'], (info['top']-50))}, 500);
+                    back = false;
                 }
                 if (data.error_fields) {
                     let counter = 0;
@@ -590,12 +651,13 @@ function sendForm (name, id, back, url, method, type) {
                             }, 500);
                         }
                     }
+                    back = false;
                 }
             }
         }).done(function () {
             send_status = true;
-            // всё отработало хорошо
-            state = { 'page_id': name, 'content_id': id, 'function': 'sendForm', 'url': url, 'data': [] };
+            // everything completed successfully
+            state = { 'page_id': name, 'content_id': id, 'function': 'sendForm', 'url': url };
             if (loggen) {
                 console.log("%cSave to browser history:", CSS_Style.h3);
                 console.table({'state': state});
@@ -603,93 +665,92 @@ function sendForm (name, id, back, url, method, type) {
             }
             if (!no_history) window.history.pushState(state, title, newurldata);
             else no_history = 0;
-            if (run_script) {
-                let param =  'setTimeout(function () { '+script.function+ '('+script.arg+'); }, '+animation_time/5+');'
-                if (loggen) console.log("%cRun new script: %c "+param, CSS_Style.green, CSS_Style.orange);
-                let run = new Function(param);
-                run();
-            }
-            // снимаем заставку
+            if (run_script) runResponseHandler(script);
+            // hide the loader
             Loader(true);
             if (loggen) {
                 console.log("%cSend status: %c"+send_status, CSS_Style.green, CSS_Style.red);
                 console.log("%cSUCCESS", CSS_Style.green);
+                console.log("%cReturn %c" + back, CSS_Style.green, CSS_Style.red);
                 console.timeEnd("sendForm");
                 console.groupEnd();
             }
         }).fail(function () {
-            // произошла ошибка в работе
-            // снимаем заставку
+            // an error occurred during the operation
+            // hide the loader
             Loader(true);
+            back = false;
             if (loggen) {
                 console.error("FAIL");
+                console.log("%cReturn %c" + back, CSS_Style.green, CSS_Style.red);
                 console.timeEnd("sendForm");
                 console.groupEnd();
             }
             back = false;
         });
     }
-    // возникли ошибки при проверке формы
+    // errors occurred while validating the form
     else {
-        // снимаем заставку
+        // hide the loader
         Loader(true);
+        back = error;
         if (loggen) {
             console.error("Check form ERROR!");
+            console.log("%cReturn %c" + back, CSS_Style.green, CSS_Style.red);
             console.timeEnd("sendForm");
             console.groupEnd();
         }
-        back = error;
     }
     return back;
 }
 
 /**
- * AJAX функция "перехода" по страницам с использованием ID гипперссылки без перезагрузки страницы браузера
- * Получает контент от сервера и отображает его на странице
- * Все параметры по умолчанию прописываются в блоке "Глобальные переменные"
- * Адрес запрашиваемой страницы (URL) берётся из параметра data-href или href
+ * AJAX function for navigating between pages using a hyperlink ID without reloading the browser page
+ * Retrieves content from the server and displays it on the page
+ * All default parameters are defined in the "Global variables" block
+ * The requested page address (URL) is taken from the data-href or href attribute
  *
- * Пример:
- * <div id="id_1" data-href="/index.php?param_x=value_x" onclick="return getPageID(this.id)" data-title="Новый заголовок страницы">
- *     или
- * <a id="id_2" href="/index.php?param_x=value_x" onclick="return getPageID(this.id)" data-title="Новый заголовок страницы" title="заголовок ссылки">
- *
- * +--------------------------------------------------+
- * |              Передаваемые параметры              |
- * +--------------------------------------------------+
- * @param name      -   ID гипперссылки
- * @param id        -   ID блока вывода ответа, если не указан, то параметр по умолчанию
- * @param method    -   метод, используемый для передачи данных (GET/POST), если отсутствует, то метод по умолчанию
- * @param type      -   тип данных, используемый при передаче данных на сервер, если отсутствует, то тип по умолчанию
+ * Example:
+ * <div id="id_1" data-href="/index.php?param_x=value_x" onclick="return getPageID(this.id)" data-title="New page title">
+ *     or
+ * <a id="id_2" href="/index.php?param_x=value_x" onclick="return getPageID(this.id)" data-title="New page title" title="Link title">
  *
  * +--------------------------------------------------+
- * |             Возвращаемые параметры               |
+ * |                 Input parameters                 |
  * +--------------------------------------------------+
- * Сервер может возвращать массив данных со следующими предопределёнными ключами
- *          error {boolean}     -   наличие ошибки
- *          alert {string}      -   текст информационного сообщения или ошибки
- *          html {string}       -   HTML-текст для вывода на экран
- *          url {string}        -   URL на который надо перенаправить (происходит переход на указанный URL)
- *          no_error {boolean}  -   не отображать (true) или отображать сообщение об ошибке
- *          title {string}      -   заголовок новой страницы (<title>), если не передан, то
- *                                  берётся из параметра data-title или title гипперссылки (по параметру name)
- *          set_url {string}    -   url, который отображается в адресной строке
- *          script {string}     -   script, который надо выполнить по итогу (объект, содержащий два ключа: 'arg' и 'function', где 'arg' - аргументы функции, а 'function' - имя функции. Например, 'arg' => '"text", true', 'function' => 'initEditor')
+ * @param name      -   hyperlink ID
+ * @param id        -   response output block ID; uses the default parameter when omitted
+ * @param method    -   method used to send data (GET/POST); uses the default method when omitted
+ * @param type      -   data type used when sending data to the server; uses the default type when omitted
  *
- * В возвращаемом массиве могут быть и иные данные в следующем формате: {key_id => html_text}, где
- *          key_id {string}     -   ID блока на странице, в котором будет заменёно содержимое,
- *          html_text {string}  -   HTML-текст, который отобразится в блоке с идентификатором key_id
+ * +--------------------------------------------------+
+ * |                Returned parameters                |
+ * +--------------------------------------------------+
+ * The server can return a data array with the following predefined keys
+ *          error {boolean}     -   whether an error occurred
+ *          alert {string}      -   informational or error message text
+ *          html {string}       -   HTML text to display
+ *          url {string}        -   URL to redirect to (navigates to the specified URL)
+ *          no_error {boolean}  -   hide (true) or show the error message
+ *          title {string}      -   new page title (<title>); when omitted,
+ *                                  it is taken from the data-title or title attribute of the hyperlink (by the name parameter)
+ *          set_url {string}    -   URL displayed in the address bar
+ *          script {object}     -   registered response handler to run afterward. Contains 'function' and an 'args' array. For example, { function: 'initEditor', args: ['text', true] }
+ *
+ * The returned array may also contain other data in this format: {key_id => html_text}, where
+ *          key_id {string}     -   ID of the page block whose content will be replaced,
+ *          html_text {string}  -   HTML text displayed in the block identified by key_id
  *
  * @returns {boolean}
  */
 function getPageID (name, id, method, type) {
-    // настройка скрипта
-    let show_error = true;      // отобразить ли сообщение об ошибке если сервер вернул ошибку
-    let use_animation = true;   // использовать ли анимацию при смене страниц
+    // script settings
+    let show_error = true;      // whether to show an error message when the server returns an error
+    let use_animation = true;   // whether to use animation when changing pages
     send_status = false;
-    // если к url надо добавить ещё какие либо дополнительные параметры,
-    // указываем их в переменной param
-    // например: let param = 'param_1=value_1&param_2=value_2';
+    // If additional parameters must be added to the URL,
+    // specify them in the param variable.
+    // For example: let param = 'param_1=value_1&param_2=value_2';
     let param = 'js='+getKeyDay();
     if (loggen) {
         console.group("getPageID");
@@ -704,11 +765,11 @@ function getPageID (name, id, method, type) {
         }
         return false;
     }
-    // ставим заставку
+    // show the loader
     Loader();
     let run_script  = 0;
     let obj = document.getElementById(name);
-    // проверяем наличие блока вывода по переданному ID
+    // check that the output block exists for the supplied ID
     let output = true;
     if (!id) {
         id = default_id;
@@ -739,15 +800,55 @@ function getPageID (name, id, method, type) {
         }
         return false;
     }
-    // определяем URL
+    // determine the URL
     let newurldata = (obj.dataset.href)?obj.dataset.href:obj.href;
-    // определяем метод передачи данных
+    // determine the data transfer method
     if (!method) method = default_method;
-    // определяем тип данных
+    // determine the data type
     if (!type) type = default_type;
+    let reg = /\#/;
+    if (document.getElementById('check_menu')) {
+        let check = document.getElementById('check_menu');
+        if (check.checked) check.checked = false;
+    }
+    if (reg.test(newurldata)) {
+        reg = /([^\#]+)\#([^\#\?\&]+)/;
+        let anchor = newurldata.replace(reg, "$2");
+        console.log(newurldata + " == %c" + anchor, CSS_Style.red);
+        let anchorElement = document.getElementById(anchor);
+        if (anchorElement) {
+            console.log("OK ID - "+anchor);
+            anchorElement.scrollIntoView({
+                behavior: 'smooth',
+            });
+        }
+        else if (anchor == 'top') {
+            window.scrollTo({top: 0, left: 0, behavior: "smooth"});
+        }
+        else if (document.getElementsByName(anchor)[0]) {
+            console.log("OK Name - "+anchor);
+            let topobj = document.getElementById('text');
+            let styles = window.getComputedStyle(topobj);
+            reg = /px/;
+            let koe = styles.getPropertyValue('padding-top').replace(reg, "");
+            let obj = document.getElementsByName(anchor)[0];
+            let coordinate = obj.getBoundingClientRect();
+            let scrollY = window.scrollY;
+            let space = $('#block00s').height();
+            let goto = coordinate.y - koe + space + scrollY;
+            window.scrollTo({left: 0, top: goto, behavior: "smooth"});
+        }
+        else console.log("FALSE - "+anchor);
+        Loader(true);
+        if (loggen) {
+            console.timeEnd("getPageID");
+            console.groupEnd();
+        }
+        return false;
+    }
     let urldata = '';
+    reg = /^(.+)?(\/?\?.+)$/;
     if (param) {
-        let reg = /^(.+)?(\/?\?.+)$/;
         if (loggen) console.log("Check URL: %c"+newurldata, CSS_Style.blue);
         if (reg.test(newurldata)) urldata = newurldata.replace(reg, "$1$2&" + param);
         else {
@@ -758,10 +859,10 @@ function getPageID (name, id, method, type) {
         if (loggen) console.log("New URL: %c"+urldata, CSS_Style.blue);
     }
     else urldata = newurldata;
-    // определяем заголовок
+    // determine the title
     let title = obj.dataset.title;
     if (!title) title = obj.title;
-    // создаём объект перехода по ссылке для истории браузера
+    // create a navigation object for browser history
     let state = {}; // 'page_id': name, 'content_id': id };
     if (loggen) console.log("Get from link ID %c"+name+"%c to URL: %c"+urldata, CSS_Style.green, CSS_Style.clear, CSS_Style.blue);
     $.ajax({
@@ -769,12 +870,12 @@ function getPageID (name, id, method, type) {
         method:     method,
         dataType:   type,
         success: function( data ) {
-            // результат работы
+            // operation result
             if (loggen) {
                 console.log("%cReturn DATA:", CSS_Style.h3);
                 console.table(data);
             }
-            // сервер вернул ошибку
+            // the server returned an error
             if (data.error) {
                 if (loggen) console.warn("ERROR return from server!");
                 if (!data.no_error && show_error) {
@@ -782,34 +883,38 @@ function getPageID (name, id, method, type) {
                     showAlert(txt, (animation_time*2));
                 }
             }
-            // с сервера пришло информационное сообщение
+            // an informational message arrived from the server
             else if (data.alert) {
                 if (loggen) console.info("Show alert from server");
                 showAlert(data.alert, (animation_time*2));
             }
-            // пришло перенаправление на URL
+            // a URL redirect arrived
             if (data.url) {
-                if (loggen) console.info("Go to URL: "+data.url);
-                document.location.href = data.url;
-                return true;
+                let safeUrl = getSafeNavigationUrl(data.url);
+                if (safeUrl) {
+                    if (loggen) console.info("Go to URL: "+safeUrl);
+                    document.location.href = safeUrl;
+                    return true;
+                }
+                if (loggen) console.warn("Unsafe redirect URL rejected");
             }
-            // с сервера пришёл HTML-текст
+            // HTML text arrived from the server
             if (data.html) {
                 if (loggen) console.log("Write HTML from server");
                 let new_obj = $("#"+id);
                 if (use_animation) {
                     if (loggen) console.log("Set animation text for %c"+id, CSS_Style.green);
                     new_obj.fadeOut("slow", function () {
-                        new_obj.html(data.html);
+                        setResponseContent(new_obj, data.html);
                         new_obj.fadeIn("slow");
                     });
                 }
                 else {
                     if (loggen) console.log("Set static text for %c"+id, CSS_Style.green);
-                    new_obj.html( data.html );
+                    setResponseContent(new_obj, data.html);
                 }
             }
-            // с сервера пришёл заголовок документа
+            // a document title arrived from the server
             if (data.title || title) {
                 if (data.title) {
                     if (loggen) console.log("Set document Title: %c" + data.title, CSS_Style.orange);
@@ -820,7 +925,7 @@ function getPageID (name, id, method, type) {
                     document.title = title;
                 }
             }
-            // перебор переданного массива (объекта) данных
+            // iterate through the supplied data array (object)
             for (let key in data) {
                 if (key === 'error' || key === 'script' || key === 'alert' || key === 'set_url' || key === 'no_error' || key === 'title' || key === 'html' || key === 'title') continue;
                 if (!document.getElementById(key)) {
@@ -834,7 +939,7 @@ function getPageID (name, id, method, type) {
                     let type = new_obj.get(0).tagName.toLowerCase();
                     new_obj.fadeOut("slow", function () {
                         if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                        else new_obj.html(value);
+                            else setResponseContent(new_obj, value);
                         new_obj.fadeIn("slow");
                     });
                 }
@@ -843,9 +948,9 @@ function getPageID (name, id, method, type) {
                     if (loggen) console.log("Set static text for ID: %c" + key, CSS_Style.green);
                     let type = new_obj.get(0).tagName.toLowerCase();
                     if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                    else new_obj.html(value);
+                    else setResponseContent(new_obj, value);
                     if (!document.getElementById(key)) {
-                        if (loggen) console.warn("Not found ID: %с" + key, CSS_Style.red);
+                        if (loggen) console.warn("Not found ID: %c" + key, CSS_Style.red);
                     }
                 }
             }
@@ -856,11 +961,11 @@ function getPageID (name, id, method, type) {
             }
         }
     }).done (function () {
-        // всё отработало хорошо
+        // operation completed successfully
         send_status = true;
-        // снимаем заставку
+        // hide the loader
         Loader(true);
-        // записываем переход на новую страницу в историю браузера
+        // save navigation to the new page in browser history
         state = { 'page_id': name, 'content_id': id, 'function': 'getPageID', 'url': urldata, 'data': [] };
         if (loggen) {
             console.log("%cSave to browser history:", CSS_Style.h3);
@@ -869,12 +974,7 @@ function getPageID (name, id, method, type) {
         }
         if (!no_history) window.history.pushState(state, title, newurldata);
         else no_history = 0;
-        if (run_script) {
-            let param =  'setTimeout(function () { '+script.function+ '('+script.arg+'); }, '+animation_time/5+');'
-            if (loggen) console.log("%cRun new script: %c "+param, CSS_Style.green, CSS_Style.orange);
-            let run = new Function(param);
-            run();
-        }
+        if (run_script) runResponseHandler(script);
         if (loggen) {
             console.log("%cSend status: %c"+send_status, CSS_Style.green, CSS_Style.red);
             console.log("%cSUCCESS", CSS_Style.green);
@@ -882,8 +982,8 @@ function getPageID (name, id, method, type) {
             console.groupEnd();
         }
     }).fail (function () {
-        // произошло ошибка в работе
-        // снимаем заставку
+        // an error occurred during the operation
+        // hide the loader
         Loader(true);
         if (loggen) {
             console.error("FAIL");
@@ -895,58 +995,58 @@ function getPageID (name, id, method, type) {
 }
 
 /**
- * AJAX функция "перехода" по страницам с использованием переданного URL без перезагрузки страницы браузера
- * Аналогична функции getPageID, но для запроса использует переданный URL
- * Получает контент от сервера и отображает его на странице
- * Все параметры по умолчанию прописываются в блоке "Глобальные переменные"
+ * AJAX function for navigating between pages using the supplied URL without reloading the browser page
+ * Similar to getPageID, but uses the supplied URL for the request
+ * Retrieves content from the server and displays it on the page
+ * All default parameters are defined in the "Global variables" block
  *
  * +--------------------------------------------------+
- * |              Передаваемые параметры              |
+ * |                 Input parameters                 |
  * +--------------------------------------------------+
- * @param url       -   запрашиваемый URL
- * @param id        -   ID блока вывода ответа, если не указан, то параметр по умолчанию
- * @param method    -   метод, используемый для передачи данных (GET/POST), если отсутствует, то метод по умолчанию
- * @param type      -   тип данных, используемый при передаче данных на сервер, если отсутствует, то тип по умолчанию
+ * @param url       -   requested URL
+ * @param id        -   response output block ID; uses the default parameter when omitted
+ * @param method    -   method used to send data (GET/POST); uses the default method when omitted
+ * @param type      -   data type used when sending data to the server; uses the default type when omitted
  *
  * +--------------------------------------------------+
- * |             Возвращаемые параметры               |
+ * |                Returned parameters                |
  * +--------------------------------------------------+
- * Сервер может возвращать массив данных со следующими предопределёнными ключами
- *          error {boolean}     -   наличие ошибки
- *          alert {string}      -   текст информационного сообщения или ошибки
- *          html {string}       -   HTML-текст для вывода на экран
- *          url {string}        -   URL на который надо перенаправить (происходит переход на указанный URL)
- *          no_error {boolean}  -   не отображать (true) или отображать сообщение об ошибке
- *          title {string}      -   заголовок новой страницы, если не передан, то
- *                                  берётся из параметра data-title или title гипперссылки (по параметру name)
- *          set_url {string}    -   url, который отображается в адресной строке
- *          script {string}     -   script, который надо выполнить по итогу (объект, содержащий два ключа: 'arg' и 'function', где 'arg' - аргументы функции, а 'function' - имя функции. Например, 'arg' => '"text", true', 'function' => 'initEditor')
+ * The server can return a data array with the following predefined keys
+ *          error {boolean}     -   whether an error occurred
+ *          alert {string}      -   informational or error message text
+ *          html {string}       -   HTML text to display
+ *          url {string}        -   URL to redirect to (navigates to the specified URL)
+ *          no_error {boolean}  -   hide (true) or show the error message
+ *          title {string}      -   new page title; when omitted,
+ *                                  it is taken from the data-title or title attribute of the hyperlink (by the name parameter)
+ *          set_url {string}    -   URL displayed in the address bar
+ *          script {object}     -   registered response handler to run afterward. Contains 'function' and an 'args' array. For example, { function: 'initEditor', args: ['text', true] }
  *
- * В возвращаемом массиве могут быть и иные данные в следующем формате: {key_id => html_text}, где
- *          key_id {string}     -   ID блока на странице, в котором будет заменёно содержимое,
- *          html_text {string}  -   HTML-текст, который отобразится в блоке с идентификатором key_id
+ * The returned array may also contain other data in this format: {key_id => html_text}, where
+ *          key_id {string}     -   ID of the page block whose content will be replaced,
+ *          html_text {string}  -   HTML text displayed in the block identified by key_id
  *
  * @returns {boolean}
  */
 function getPageURL (url, id, method, type) {
-    // настройка скрипта
-    let show_error = true;      // отобразить ли сообщение об ошибке если сервер вернул ошибку
-    let use_animation = true;   // использовать ли анимацию при смене страниц
-    let title = 'Title '+url;   // заголовок страницы для истории браузера
+    // script settings
+    let show_error = true;      // whether to show an error message when the server returns an error
+    let use_animation = true;   // whether to use animation when changing pages
+    let title = 'Title '+url;   // page title for browser history
     send_status = false;
-    // если к url надо добавить ещё какие либо дополнительные параметры,
-    // указываем их в переменной param
-    // например: let param = 'param_1=value_1&param_2=value_2';
-    let param = 'js='+getKeyDay();
+    // If additional parameters must be added to the URL,
+    // specify them in the param variable.
+    // For example: let param = 'param_1=value_1&param_2=value_2';
+    let param = 'js=1';
     if (loggen) {
         console.group("getPageURL");
         console.time("getPageURL");
         console.log("URL: %c" + url, CSS_Style.green);
     }
-    // ставим заставку
+    // show the loader
     Loader();
     let run_script  = 0;
-    // проверяем наличие блока вывода по переданному ID
+    // check that the output block exists for the supplied ID
     let output = true;
     if (!id) {
         id = default_id;
@@ -976,11 +1076,11 @@ function getPageURL (url, id, method, type) {
         }
         return false;
     }
-    // определяем URL
+    // determine the URL
     let newurldata = url;
-    // определяем метод передачи данных
+    // determine the data transfer method
     if (!method) method = default_method;
-    // определяем тип данных
+    // determine the data type
     if (!type) type = default_type;
     let urldata = '';
     if (param) {
@@ -995,7 +1095,7 @@ function getPageURL (url, id, method, type) {
         if (loggen) console.log("New URL: %c"+urldata, CSS_Style.blue);
     }
     else urldata = newurldata;
-    // создаём объект перехода по ссылке для истории браузера
+    // create a navigation object for browser history
     let state = {}; // 'page_url': url, 'content_id': id };
     if (loggen) console.log("Get to URL: %c"+urldata, CSS_Style.blue);
     $.ajax({
@@ -1003,12 +1103,12 @@ function getPageURL (url, id, method, type) {
         method:     method,
         dataType:   type,
         success: function( data ) {
-            // результат работы
+            // operation result
             if (loggen) {
                 console.log("%cReturn DATA:", CSS_Style.h3);
                 console.table(data);
             }
-            // сервер вернул ошибку
+            // the server returned an error
             if (data.error) {
                 if (loggen) console.warn("ERROR return from server!");
                 if (!data.no_error && show_error) {
@@ -1016,40 +1116,44 @@ function getPageURL (url, id, method, type) {
                     showAlert(txt, (animation_time*2));
                 }
             }
-            // с сервера пришло информационное сообщение
+            // an informational message arrived from the server
             else if (data.alert) {
                 if (loggen) console.info("Show alert from server");
                 showAlert(data.alert, (animation_time*2));
             }
-            // пришло перенаправление на URL
+            // a URL redirect arrived
             if (data.url) {
-                if (loggen) console.info("Go to URL: "+data.url);
-                document.location.href = data.url;
-                return true;
+                let safeUrl = getSafeNavigationUrl(data.url);
+                if (safeUrl) {
+                    if (loggen) console.info("Go to URL: "+safeUrl);
+                    document.location.href = safeUrl;
+                    return true;
+                }
+                if (loggen) console.warn("Unsafe redirect URL rejected");
             }
-            // с сервера пришёл HTML-текст
+            // HTML text arrived from the server
             if (data.html) {
                 if (loggen) console.log("Write HTML from server");
                 let new_obj = $("#"+id);
                 if (use_animation) {
                     if (loggen) console.log("Set animation text for %c"+id, CSS_Style.green);
                     new_obj.fadeOut("slow", function () {
-                        new_obj.html(data.html);
+                        setResponseContent(new_obj, data.html);
                         new_obj.fadeIn("slow");
                     });
                 }
                 else {
                     if (loggen) console.log("Set static text for %c"+id, CSS_Style.green);
-                    new_obj.html( data.html );
+                    setResponseContent(new_obj, data.html);
                 }
             }
-            // с сервера пришёл заголовок документа
+            // a document title arrived from the server
             if (data.title) {
                 if (loggen) console.log("Set document Title: %c" + data.title, CSS_Style.orange);
                 document.title = data.title;
                 title = data.title;
             }
-            // перебор переданного массива (объекта) данных
+            // iterate through the supplied data array (object)
             for (let key in data) {
                 if (key === 'error' || key === 'script' || key === 'alert' || key === 'no_error' || key === 'title' || key === 'html') continue;
                 if (!document.getElementById(key)) {
@@ -1063,7 +1167,7 @@ function getPageURL (url, id, method, type) {
                     let type = new_obj.get(0).tagName.toLowerCase();
                     new_obj.fadeOut("slow", function () {
                         if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                        else new_obj.html(value);
+                        else setResponseContent(new_obj, value);
                         new_obj.fadeIn("slow");
                     });
                 }
@@ -1072,7 +1176,7 @@ function getPageURL (url, id, method, type) {
                     if (loggen) console.log("Set static text for ID: %c" + key, CSS_Style.green);
                     let type = new_obj.get(0).tagName.toLowerCase();
                     if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                    else new_obj.html(value);
+                    else setResponseContent(new_obj, value);
                 }
             }
             if (data.set_url) newurldata = data.set_url;
@@ -1083,7 +1187,7 @@ function getPageURL (url, id, method, type) {
         }
     }).done (function () {
         send_status = true;
-        // записываем переход на новую страницу в историю браузера
+        // save navigation to the new page in browser history
         state = { 'page_id': url, 'content_id': id, 'function': 'getPageURL', 'url': urldata, 'data': [] };
         if (loggen) {
             console.log("%cSave to browser history:", CSS_Style.h3);
@@ -1091,14 +1195,9 @@ function getPageURL (url, id, method, type) {
             console.table({'title': title, 'new_url': newurldata});
         }
         if (!no_history) window.history.pushState(state, title, newurldata);
-        else no_history = 0;// всё отработало хорошо
-        if (loggen) console.log("getPageURL() SUCCESS");// снимаем заставку
-        if (run_script) {
-            let param =  'setTimeout(function () { '+script.function+ '('+script.arg+'); }, '+animation_time/5+');'
-            if (loggen) console.log("%cRun new script: %c "+param, CSS_Style.green, CSS_Style.orange);
-            let run = new Function(param);
-            run();
-        }
+        else no_history = 0;// operation completed successfully
+        if (loggen) console.log("getPageURL() SUCCESS");// hide the loader
+        if (run_script) runResponseHandler(script);
         Loader(true);
         if (loggen) {
             console.log("%cSend status: %c"+send_status, CSS_Style.green, CSS_Style.red);
@@ -1107,8 +1206,8 @@ function getPageURL (url, id, method, type) {
             console.groupEnd();
         }
     }).fail (function () {
-        // произошло ошибка в работе
-        // снимаем заставку
+        // an error occurred during the operation
+        // hide the loader
         Loader(true);
         if (loggen) {
             console.error("FAIL");
@@ -1121,23 +1220,23 @@ function getPageURL (url, id, method, type) {
 }
 
 /**
- * Переход по ID к URL
- * По событию происходит переход к URL, указанному в data-href или href объекта
+ * Navigate to a URL by ID
+ * When triggered, navigates to the URL specified in the object's data-href or href attribute
  *
- * Пример:
+ * Example:
  * <div id="id_1" data-href="/index.php?param_x=value_x" onclick="return goToURL(this.id, true, 'width=600,height=400')">
- *     или
- * <a id="id_2" href="/index.php?param_x=value_x" onclick="return goToURL(this.id)" title="заголовок ссылки">
+ *     or
+ * <a id="id_2" href="/index.php?param_x=value_x" onclick="return goToURL(this.id)" title="Link title">
  *
- * @param id - ID объекта
- * @param blank - открыть в новом окне (true) или в текущем (false)
- * @param options - параметры нового окна
+ * @param id - object ID
+ * @param blank - open in a new window (true) or the current one (false)
+ * @param options - new window options
  * @returns {boolean}
  */
 function goToURL(id, blank, options) {
-    // если к url надо добавить ещё какие либо дополнительные параметры,
-    // указываем их в переменной param
-    // например: let param = 'param_1=value_1&param_2=value_2';
+    // If additional parameters must be added to the URL,
+    // specify them in the param variable.
+    // For example: let param = 'param_1=value_1&param_2=value_2';
     let param = '';
     blank = blank || false;
     options = options || '';
@@ -1155,7 +1254,7 @@ function goToURL(id, blank, options) {
         return false;
     }
     let obj = document.getElementById(id);
-    // определяем URL
+    // determine the URL
     let url = (obj.dataset.href)?obj.dataset.href:obj.href;
     if (param) {
         let reg = /^(.+)?(\/?\?.+)$/;
@@ -1174,13 +1273,18 @@ function goToURL(id, blank, options) {
         console.timeEnd("goToURL");
         console.groupEnd();
     }
-    if (blank) window.open(url, '_blank', options);
-    else document.location.href = url;
+    let safeUrl = getSafeNavigationUrl(url);
+    if (!safeUrl) return false;
+    if (blank) {
+        let opened = window.open(safeUrl, '_blank', options);
+        if (opened) opened.opener = null;
+    }
+    else document.location.href = safeUrl;
 }
 
 /**
- * Подключение внешнего JS файла
- * @param url - адрес файла
+ * Include an external JS file
+ * @param url - file address
  * @return {boolean}
  */
 function includeJS(url) {
@@ -1189,8 +1293,10 @@ function includeJS(url) {
         console.time("includeJS");
         console.log("Included URL: %c" + url, CSS_Style.blue);
     }
+    let safeUrl = getSafeScriptUrl(url);
+    if (!safeUrl) return false;
     let script = document.createElement('script');
-    script.src = url;
+    script.src = safeUrl;
     document.getElementsByTagName('head')[0].appendChild(script);
     if (loggen) {
         console.log("%cDone", CSS_Style.orange);
@@ -1201,144 +1307,144 @@ function includeJS(url) {
 }
 
 /**
- * Получение массива с установленным в браузере пользователя порядком языковых предпочтений
- * И подключение языковых файлов
+ * Get an array containing the user's language preference order set in the browser
+ * and include language files
  *
- * Пример:
+ * Example:
  *      getLanguage();
- *    или
+ *    or
  *      let lang = getLanguage('',false);
- *    или
+ *    or
  *      let srv = JSON.parse('<?php echo strtr(json_encode($_SERVER), array('\\\\'=>'\\/')); ?>');
  *      str = srv.HTTP_ACCEPT_LANGUAGE;
  *      getLanguage(str, true);
  *
- * @param str - строка с перечнем языковых настроек (необязательный параметр)
- *      str может быть получена из PHP кода из переменной _SERVER:
+ * @param str - string listing language settings (optional parameter)
+ *      str can be obtained from PHP code using the _SERVER variable:
  *          str = '<?php echo $_SERVER['HTTP_ACCEPT_LANGUAGE']; ?>';
- *        или
+ *        or
  *          let srv = JSON.parse('<?php echo strtr(json_encode($_SERVER), array('\\\\'=>'\\/')); ?>');
  *          str = srv.HTTP_ACCEPT_LANGUAGE;
- *          (в данном случае переменная srv содержит все Headers (заголовки) браузера доступные в PHP)
- * @param include - подключать или нет языковые файлы (true/false)
- * @param cookie_name - имя cookie, содержащее языковой параметр
+ *          (in this case, the srv variable contains all browser Headers available in PHP)
+ * @param include - whether to include language files (true/false)
+ * @param cookie_name - name of the cookie containing the language setting
  *
  * --------------------------------------+
- * СПРАВОЧНИК СОКРАЩЕНИЙ (КОДОВ) ЯЗЫКОВ: |
+ * LANGUAGE ABBREVIATION (CODE) REFERENCE: |
  * --------------------------------------+
- * Абхазский                        ab
- * Азербайджанский                  az
- * Аймарский                        ay
- * Албанский                        sq
- * Английский                       en
- * Американский английский          en-us
- * Арабский                         ar
- * Армянский                        hy
- * Ассамский                        as
- * Африкаанс                        af
- * Башкирский                       ba
- * Белорусский                      be
- * Бенгальский                      bn
- * Болгарский                       bg
- * Бретонский                       br
- * Валлийский                       cy
- * Венгерский                       hu
- * Вьетнамский                      vi
- * Галисийский                      gl
- * Голландский                      nl
- * Греческий                        el
- * Грузинский                       ka
- * Гуарани                          gn
- * Датский                          da
- * Зулу                             zu
- * Иврит                            iw
- * Идиш                             ji
- * Индонезийский                    in
- * Интерлингва (искусственный язык) ia
- * Ирландский                       ga
- * Исландский                       is
- * Испанский                        es
- * Итальянский                      it
- * Казахский                        kk
- * Камбоджийский                    km
- * Каталанский                      ca
- * Кашмирский                       ks
- * Кечуа                            qu
- * Киргизский                       ky
- * Китайский                        zh
- * Корейский                        ko
- * Корсиканский                     co
- * Курдский                         ku
- * Лаосский                         lo
- * Латвийский, латышский            lv
- * Латынь                           la
- * Литовский                        lt
- * Малагасийский                    mg
- * Малайский                        ms
- * Мальтийский                      mt
- * Маори                            mi
- * Македонский                      mk
- * Молдавский                       mo
- * Монгольский                      mn
- * Науру                            na
- * Немецкий                         de
- * Непальский                       ne
- * Норвежский                       no
- * Пенджаби                         pa
- * Персидский                       fa
- * Польский                         pl
- * Португальский                    pt
- * Пуштунский                       ps
- * Ретороманский                    rm
- * Румынский                        ro
- * Русский                          ru
- * Самоанский                       sm
- * Санскрит                         sa
- * Сербский                         sr
- * Словацкий                        sk
- * Словенский                       sl
- * Сомали                           so
- * Суахили                          sw
- * Суданский                        su
- * Тагальский                       tl
- * Таджикский                       tg
- * Тайский                          th
- * Тамильский                       ta
- * Татарский                        tt
- * Тибетский                        bo
- * Тонга                            to
- * Турецкий                         tr
- * Туркменский                      tk
- * Узбекский                        uz
- * Украинский                       uk
- * Урду                             ur
- * Фиджи                            fj
- * Финский                          fi
- * Французский                      fr
- * Фризский                         fy
- * Хауса                            ha
- * Хинди                            hi
- * Хорватский                       hr
- * Чешский                          cs
- * Шведский                         sv
- * Эсперанто (искусственный язык)   eo
- * Эстонский                        et
- * Яванский                         jw
- * Японский                         ja
+ * Abkhaz                          ab
+ * Azerbaijani                     az
+ * Aymara                          ay
+ * Albanian                        sq
+ * English                         en
+ * American English                en-us
+ * Arabic                          ar
+ * Armenian                        hy
+ * Assamese                        as
+ * Afrikaans                       af
+ * Bashkir                         ba
+ * Belarusian                      be
+ * Bengali                         bn
+ * Bulgarian                       bg
+ * Breton                          br
+ * Welsh                           cy
+ * Hungarian                       hu
+ * Vietnamese                      vi
+ * Galician                        gl
+ * Dutch                           nl
+ * Greek                           el
+ * Georgian                        ka
+ * Guarani                         gn
+ * Danish                          da
+ * Zulu                            zu
+ * Hebrew                          iw
+ * Yiddish                         ji
+ * Indonesian                      in
+ * Interlingua (artificial language) ia
+ * Irish                           ga
+ * Icelandic                       is
+ * Spanish                         es
+ * Italian                         it
+ * Kazakh                          kk
+ * Cambodian                       km
+ * Catalan                         ca
+ * Kashmiri                        ks
+ * Quechua                         qu
+ * Kyrgyz                          ky
+ * Chinese                         zh
+ * Korean                          ko
+ * Corsican                        co
+ * Kurdish                         ku
+ * Lao                             lo
+ * Latvian                         lv
+ * Latin                           la
+ * Lithuanian                      lt
+ * Malagasy                        mg
+ * Malay                           ms
+ * Maltese                         mt
+ * Maori                           mi
+ * Macedonian                      mk
+ * Moldavian                       mo
+ * Mongolian                       mn
+ * Nauru                           na
+ * German                          de
+ * Nepali                          ne
+ * Norwegian                       no
+ * Punjabi                         pa
+ * Persian                         fa
+ * Polish                          pl
+ * Portuguese                      pt
+ * Pashto                          ps
+ * Romansh                         rm
+ * Romanian                        ro
+ * Russian                         ru
+ * Samoan                          sm
+ * Sanskrit                        sa
+ * Serbian                         sr
+ * Slovak                          sk
+ * Slovenian                       sl
+ * Somali                          so
+ * Swahili                         sw
+ * Sundanese                       su
+ * Tagalog                         tl
+ * Tajik                           tg
+ * Thai                            th
+ * Tamil                           ta
+ * Tatar                           tt
+ * Tibetan                         bo
+ * Tongan                          to
+ * Turkish                         tr
+ * Turkmen                         tk
+ * Uzbek                           uz
+ * Ukrainian                       uk
+ * Urdu                            ur
+ * Fijian                          fj
+ * Finnish                         fi
+ * French                          fr
+ * Frisian                         fy
+ * Hausa                           ha
+ * Hindi                           hi
+ * Croatian                        hr
+ * Czech                           cs
+ * Swedish                         sv
+ * Esperanto (artificial language) eo
+ * Estonian                        et
+ * Javanese                        jw
+ * Japanese                        ja
  * --------------------------------------+
- * @return array - массив, упорядоченный по ключам, где по ключу "0" - первый язык (код языка) браузера, "1" - второй и т.д.
+ * @return array - array ordered by key, where key "0" is the browser's first language (language code), "1" is the second, and so on
  */
 function getLanguage (str, include, cookie_name) {
-    // настройка функции
-    let include_local = true;                           // настройка подключения языковых файлов по умолчанию
-    let delete_cookie = true;                           // удалять временные языковые куки
-    // регулярные выражения
+    // function settings
+    let include_local = true;                           // default setting for including language files
+    let delete_cookie = true;                           // delete temporary language cookies
+    // regular expressions
     let lng_str;
     let reg_1 = /,/;
     let reg_2 = /;/;
     let reg_3 = /q\=/;
     let reg_4 = /-.+/;
-    // локальные переменные
+    // local variables
     let lng_array_1;
     let lng_array_2;
     let lng_nm = {};
@@ -1354,9 +1460,9 @@ function getLanguage (str, include, cookie_name) {
         console.log("Include: %c"+include, CSS_Style.orange);
     }
     Loader();
-    // если данные переданы в строке
+    // if data is supplied in a string
     if (str) {
-        // обрабатываем параметры, переданные в строке
+        // process parameters supplied in the string
         lng_str = str;
         lng_array_1 = lng_str.split(reg_1);
         for (lng_str in lng_array_1) {
@@ -1378,9 +1484,9 @@ function getLanguage (str, include, cookie_name) {
         if (include) includeLanguage(lng);
         Loader(true);
     }
-    // если в строке данные не передавались
+    // if no data was supplied in a string
     else {
-        // используем локальные параметры
+        // use local parameters
         if (loggen) console.info("Use local parameters");
         if (!cookie_name) cookie_name = 'this_site_language';
         let cookie_lng = getCookie(cookie_name);
@@ -1410,18 +1516,18 @@ function getLanguage (str, include, cookie_name) {
 }
 
 /**
- * Подключение языковых файлов JS
- * происходит проверка существования языковых файлов и подключение первого имеющегося
- * если не найдено ни одного языкового файла из переданного массива, то подключается языковой файл по умолчанию
- * @param lng   - массив получаемый из функции getLanguage(), см. выше
- * @param dir   - путь к директории (папке) в которой расположены языковые JS файлы
- * @param file  - префикс имени языковых JS файлов
+ * Include language JS files
+ * Checks whether language files exist and includes the first available one
+ * If none of the language files in the supplied array are found, the default language file is included
+ * @param lng   - array returned by getLanguage(); see above
+ * @param dir   - path to the directory (folder) containing language JS files
+ * @param file  - language JS file name prefix
  * @return {boolean}
  */
 function includeLanguage (lng, dir, file) {
-    // локальные переменные
-    let url;                                    // сгенерированный путь к файлу
-    let res = {};                               // массив результатов асинхронных запросов
+    // local variables
+    let url;                                    // generated file path
+    let res = {};                               // asynchronous request results array
     let sum = [];
     let key;
     let ln;
@@ -1433,8 +1539,8 @@ function includeLanguage (lng, dir, file) {
         console.log("Check DIR: %c"+dir, CSS_Style.orange);
         console.log("Prefix: %c"+file, CSS_Style.orange);
     }
-    // функции обратного вызова для правильной обработки асинхронных запросов при проверке существования файлов
-    // файл существует
+    // callbacks for correctly handling asynchronous requests when checking whether files exist
+    // the file exists
     let successCallback = function (lan) {
         if (loggen) {
             console.group("includeLanguage "+lan);
@@ -1446,7 +1552,7 @@ function includeLanguage (lng, dir, file) {
         let finish = false;
         let res_file = 'none';
         if (key == ObjLen(lng)) {
-            let included = false;       // признак того, что файл подключен
+            let included = false;       // indicates whether a file is included
             let val;
             for (key in lng) {
                 val = lng[key];
@@ -1482,7 +1588,7 @@ function includeLanguage (lng, dir, file) {
             }
         }
     }
-    // файл не существует
+    // the file does not exist
     let errorCallback = function (lan) {
         if (loggen) {
             console.group("includeLanguage "+lan);
@@ -1494,7 +1600,7 @@ function includeLanguage (lng, dir, file) {
         let finish = false;
         let res_file = 'none';
         if (key == ObjLen(lng)) {
-            let included = false;       // признак того, что файл подключен
+            let included = false;       // indicates whether a file is included
             let val;
             for (key in lng) {
                 val = lng[key];
@@ -1546,7 +1652,7 @@ function includeLanguage (lng, dir, file) {
                 if (loggen) console.log("Include file: %c" + url, CSS_Style.green);
                 lng = [];
                 lng[0] = ln;
-                // проверяем существует или не существует файл
+                // check whether the file exists
                 checkFile(url, successCallback, errorCallback, ln);
                 inc = true;
                 break;
@@ -1555,12 +1661,12 @@ function includeLanguage (lng, dir, file) {
         if (loggen && !inc) console.log("Key "+lang_key+"%c not passed", CSS_Style.red);
     }
     if (!inc) {
-        // перебор переданного массива с поддерживаемыми браузером языками
+        // Iterate through the supplied array of browser-supported languages
         for (key in lng) {
             ln = lng[key];
             url = dir + '' + file + '' + ln + '.js';
             if (loggen) console.log("Include file: %c" + url, CSS_Style.green);
-            // проверяем существует или не существует файл
+            // Check whether the file exists
             checkFile(url, successCallback, errorCallback, ln);
         }
     }
@@ -1574,11 +1680,11 @@ function includeLanguage (lng, dir, file) {
 }
 
 /**
- * Проверка существования языкового файла
- * @param url       - запрашиваемый URL
- * @param successF  - ссылка на функцию, выполняемую в случае наличия файла по указанному URL
- * @param errorF    - ссылка на функцию, выполняемую в случае отсутствия файла по указанному URL
- * @param ln        - дополнительный параметр, возвращаемый в функцию, выполняемую по результату запроса
+ * Check whether a language file exists
+ * @param url       - requested URL
+ * @param successF  - reference to the function invoked if the file exists at the specified URL
+ * @param errorF    - reference to the function invoked if the file does not exist at the specified URL
+ * @param ln        - additional parameter returned to the function invoked with the request result
  */
 function checkFile (url, successF, errorF, ln) {
     if (loggen) console.log("checkFile() URL: %c"+url, CSS_Style.green);
@@ -1596,8 +1702,8 @@ function checkFile (url, successF, errorF, ln) {
 }
 
 /**
- * Функция, выщитывающая размер переданного объекта/массива
- * @param obj - объект/массив
+ * Function that calculates the size of the provided object/array
+ * @param obj - object/array
  * @return {number}
  */
 function ObjLen (obj) {
@@ -1608,26 +1714,28 @@ function ObjLen (obj) {
 }
 
 /**
- * JQuery функция центрирования элемента на странице
- * Использование: $("#block_id").center();
+ * jQuery function for centering an element on the page
+ * Usage: $("#block_id").center();
  * @returns {jQuery}
  */
 jQuery.fn.center = function () {
-    this.css("position", "absolute");
-    this.css("top", (($(window).height() - this.outerHeight()) / 2) + $(window).scrollTop() + "px");
-    this.css("left", (($(window).width() - this.outerWidth()) / 2) + $(window).scrollLeft() + "px");
+    this.css("position", "relative");
+    this.css("display", "flex");
+    this.css("display", "-webkit-flex");
+    this.css("justify-content", "center");
+    this.css("top", "-50px");
     return this;
 }
 
 /**
- * Замена стандартного диаллога confirm
- * @param text - текст, выводимый на экран
- * @param title - заголовок
- * @param func - ссылка на функцию, вызываемую по результату нажатия кнопки ОК
+ * Replacement for the standard confirm dialog
+ * @param text - text displayed on screen
+ * @param title - title
+ * @param func - reference to the function called when the OK button is pressed
  *
- * Использование в JS:
+ * Usage in JS:
  * if (MyConfirm(confirm_text, title, function () {
- *      //действия, выполняемые при нажатии кнопки OK;
+ *      //actions performed when the OK button is pressed;
  * }));
  *
  * @constructor
@@ -1642,7 +1750,7 @@ function MyConfirm (text, title, func) {
         console.log("Title: %c"+title, CSS_Style.orange);
         console.log("Function: %c"+func, CSS_Style.orange);
     }
-    // форма сообщения
+    // Message form
     // CSS Style
     let script_css = "<style type=text/css>" +
         "div.confirm_bg {" +
@@ -1708,11 +1816,11 @@ function MyConfirm (text, title, func) {
         "}";
     let content = "<div id='confirm_dialog' class='confirm_bg'>" +
         "<div class='confirm'>" +
-        "<div class='confirm_title'><p>" + title + "</p></div>" +
-        "<div class='confirm_text'>" + text + "</div>" +
+        "<div class='confirm_title'><p>" + escapeHtml(title) + "</p></div>" +
+        "<div class='confirm_text'>" + escapeHtml(text) + "</div>" +
         "<div class='confirm_buttons'>" +
-        "<button id='OkAction' class='confirm_button button_ok'>" + language[lang_use]['confirm_ok'] + "</button>" +
-        "<button id='CancelAction' class='confirm_button button_cancel'>" + language[lang_use]['confirm_cancel'] + "</button>" +
+        "<button id='OkAction' class='confirm_button button_ok'>" + escapeHtml(language[lang_use]['confirm_ok']) + "</button>" +
+        "<button id='CancelAction' class='confirm_button button_cancel'>" + escapeHtml(language[lang_use]['confirm_cancel']) + "</button>" +
         "</div>" +
         "</div>" +
         "</div>";
@@ -1725,7 +1833,7 @@ function MyConfirm (text, title, func) {
             $(this).remove();
         });
         if (loggen) console.log("Go to func");
-        func();
+        if (typeof func === 'function') func();
     });
     $('#CancelAction').click(function () {
         if (loggen) console.log("Return: %FALSE", CSS_Style.red);
@@ -1737,44 +1845,52 @@ function MyConfirm (text, title, func) {
 }
 
 /**
- * Определение данных Браузера
+ * Detect browser information
  * @return {checkBrowser}
  */
 function checkBrowser() {
     let winNav = window.navigator;
-    // Булевы значения (true/false)
-    this.dom = document.getElementById?1:0;                             // Поддерживает или нет DOM (старые браузеры, такие как IE4, не поддерживали)
-    this.isOpera = winNav.userAgent.indexOf("OPR") > -1;                // Браузер Опера
-    this.isIEedge = winNav.userAgent.indexOf("Edge") > -1;              // Браузер MS Edge
-    this.isMSIE = winNav.userAgent.indexOf("MSIE") > -1;                // Браузер MS IE старый
-    this.isIE = winNav.userAgent.indexOf("InfoPath") > -1;              // Браузер MS IE
-    this.isFF = winNav.userAgent.indexOf("Firefox") > -1;               // Браузер Firefox
-    // Todo проверить
-    this.isSafari = winNav.userAgent.indexOf("Mac") > -1;               // Браузер Safari
-    this.isChrome = window.chrome;                                      // Браузер Chrome
-    // Строковые значения
-    this.device = getPlatform();                                        // Операционная платформа ОС
-    this.version = "0";                                                 // Версия браузера
+    // Boolean values (true/false)
+    this.dom = document.getElementById?1:0;                             // Whether DOM is supported (older browsers, such as IE4, did not support it)
+    this.isOpera = winNav.userAgent.indexOf("OPR") > -1;                // Opera browser
+    this.isIEedge = winNav.userAgent.indexOf("Edge") > -1;              // MS Edge browser
+    this.isMSIE = winNav.userAgent.indexOf("MSIE") > -1;                // Legacy MS IE browser
+    this.isIE = winNav.userAgent.indexOf("InfoPath") > -1;              // MS IE browser
+    this.isFF = winNav.userAgent.indexOf("Firefox") > -1;               // Firefox browser
+    // TODO: verify
+    this.isSafari = winNav.userAgent.indexOf("Mac") > -1;               // Safari browser
+    this.isChrome = window.chrome;                                      // Chrome browser
+    this.isChromium = false;                                            // Chromium browser
+    // String values
+    this.device = getPlatform();                                        // Operating system platform
+    this.version = "0";                                                 // Browser version
     let vendorName = winNav.vendor;
     if (this.isIE && !winNav.userAgent.indexOf("rv:")) this.isIE = false;
     else if (!this.isIE && !this.isChrome && !this.isChromium && !this.isFF && !this.isIEedge && !this.isSafari && !this.isOpera && winNav.userAgent.indexOf("rv:")) this.isIE = true;
-    if (this.isChrome !== null && typeof this.isChrome !== "undefined" && vendorName === "Google Inc." && this.isOpera === false && this.isIEedge === false) this.isChrome = true;
-    this.isMS = (this.isIE || this.isIEedge || this.isMSIE)?true:false; // Продукт от Microsoft
+    if (this.isChrome !== null && typeof this.isChrome !== "undefined" && vendorName === "Google Inc." && this.isOpera === false && this.isIEedge === false) {
+        if (isWithChromePDFReader()) {
+            this.isChrome = true;
+        } else {
+            this.isChrome = false;
+            this.isChromium = true;
+        }
+    }
+    this.isMS = (this.isIE || this.isIEedge || this.isMSIE)?true:false; // Microsoft product
     if (this.isOpera) {
         this.browser = 'Opera';
         this.version = winNav.userAgent.substring((winNav.userAgent.indexOf("OPR/")+4));
     }
     else if (this.isFF) {
         this.browser = 'Firefox';
-        this.version = winNav.userAgent.substring((winNav.userAgent.indexOf("rv:")+3),4);
+        this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("rv:")+3),4);
     }
     else if (this.isMSIE) {
         this.browser = 'OldIE';
-        this.version = winNav.userAgent.substring((winNav.userAgent.indexOf("rv:")+3),4);
+        this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("rv:")+3),4);
     }
     else if (this.isIE) {
         this.browser = 'IE';
-        this.version = winNav.userAgent.substring((winNav.userAgent.indexOf("rv:")+3),4);
+        this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("rv:")+3),4);
     }
     else if (this.isIEedge) {
         this.browser = 'Edge';
@@ -1782,7 +1898,11 @@ function checkBrowser() {
     }
     else if (this.isChrome) {
         this.browser = 'Chrome';
-        this.version = winNav.userAgent.substring((winNav.userAgent.indexOf("Chrome/")+7),4);
+        this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("Chrome/")+7),4);
+    }
+    else if (this.isChromium) {
+        this.browser = 'Chromium';
+        this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("Chrome/")+7),4);
     }
     else if (this.isSafari) {
         this.browser = 'Safari';
@@ -1792,7 +1912,18 @@ function checkBrowser() {
 }
 
 /**
- * Определение операционной платформы
+ * Helper function for detecting Chromium
+ * @return {boolean}
+ */
+function isWithChromePDFReader() {
+    for (let i = 0; i < window.navigator.plugins.length; i++) {
+        if (window.navigator.plugins[i].name == 'Chrome PDF Viewer') return true;
+    }
+    return false;
+}
+
+/**
+ * Detect the operating system platform
  * @return {*}
  */
 function getPlatform () {
@@ -1812,12 +1943,12 @@ function getPlatform () {
             return userDeviceArray[i].device;
         }
     }
-    return 'Неизвестная платформа!';
+    return 'Unknown platform!';
 }
 
 /**
- * Кодирование строки в Base64
- * @param str - строка которую кодируем
+ * Encode a string as Base64
+ * @param str - string to encode
  * @return {string}
  */
 function b64EncodeUnicode(str) {
@@ -1827,8 +1958,8 @@ function b64EncodeUnicode(str) {
 }
 
 /**
- * Декодирование строки из Base64
- * @param str - строка которую декодируем
+ * Decode a Base64 string
+ * @param str - string to decode
  * @return {string}
  */
 function b64DecodeUnicode(str) {
@@ -1838,8 +1969,8 @@ function b64DecodeUnicode(str) {
 }
 
 /**
- * Проверка установок логирования
- * В куки сохраняются переключения выполненные клавишами
+ * Check logging settings
+ * Keyboard toggles are saved in cookies
  */
 function checkLog () {
     let log = getCookie('loggen');
@@ -1854,7 +1985,7 @@ function checkLog () {
 }
 
 /**
- * Возвращает cookie с именем name, если есть, если нет, то undefined
+ * Returns the cookie named name if it exists; otherwise, undefined
  * @param name
  */
 function getCookie(name) {
@@ -1865,18 +1996,18 @@ function getCookie(name) {
 }
 
 /**
- * Установка куки:
- * @param name - название cookie
- * @param value - значение cookie (строка)
- * @param options - объект с дополнительными свойствами для установки cookie:
- *      expires -   Время истечения cookie. Интерпретируется по-разному, в зависимости от типа:
- *                          Число – количество секунд до истечения. Например, expires: 3600 – кука на час.
- *                          Объект типа Date – дата истечения.
- *                  Если expires в прошлом, то cookie будет удалено.
- *                  Если expires отсутствует или 0, то cookie будет установлено как сессионное и исчезнет при закрытии браузера.
- *      path    -   Путь для cookie.
- *      domain  -   Домен для cookie.
- *      secure  - Если true, то пересылать cookie только по защищенному соединению.
+ * Set a cookie:
+ * @param name - cookie name
+ * @param value - cookie value (string)
+ * @param options - object with additional properties for setting the cookie:
+ *      expires -   Cookie expiration time. It is interpreted differently depending on the type:
+ *                          Number - number of seconds until expiration. For example, expires: 3600 - cookie for one hour.
+ *                          Date object - expiration date.
+ *                  If expires is in the past, the cookie will be deleted.
+ *                  If expires is missing or 0, the cookie will be set as a session cookie and disappear when the browser closes.
+ *      path    -   Cookie path.
+ *      domain  -   Cookie domain.
+ *      secure  - If true, send the cookie only over a secure connection.
  */
 function setCookie (name, value, options) {
     if(loggen) {
@@ -1929,8 +2060,8 @@ function setCookie (name, value, options) {
 }
 
 /**
- * Удаление куки по имени
- * @param name - имя куки
+ * Delete a cookie by name
+ * @param name - cookie name
  */
 function deleteCookie(name) {
     setCookie(name, "", {
@@ -1939,7 +2070,7 @@ function deleteCookie(name) {
 }
 
 /**
- * Подпись в консоли
+ * Console signature
  */
 let copy    = b64DecodeUnicode("4pK4IEZZTiAoUGlsZ3JpbSk=");
 let text    = b64DecodeUnicode("CkhpIGZyb20gIkxpY2h0YXJ5ayIgZGV2ZWxvcGVyIHRlYW0hCg==");
@@ -1949,10 +2080,10 @@ function signature () {
 }
 
 /**
- * Эмуляция нажатия (клика мышкой) на объект
+ * Simulate pressing (clicking) an object
  *
- * @param id - ID объекта
- * @param time - время в мс, через которое сработает функция
+ * @param id - object ID
+ * @param time - time in milliseconds before the function runs
  */
 function clickMenuButton (id, time) {
     if (!id) id = 'open-button';
@@ -1964,8 +2095,8 @@ function clickMenuButton (id, time) {
 }
 
 /**
- * Определение текущей позиции курсора относительно объекта
- * @param id - ID объекта
+ * Determine the current cursor position within an object
+ * @param id - object ID
  * @returns {*}
  */
 function getCurrentPosition (id) {
@@ -1989,10 +2120,10 @@ function getCurrentPosition (id) {
 }
 
 /**
- * Установка курсора|выделение части текста в объекте
- * @param id - ID объекта
- * @param start - начало позиции
- * @param end - конец позиции
+ * Set the cursor position or select part of the text in an object
+ * @param id - object ID
+ * @param start - starting position
+ * @param end - ending position
  */
 function setPosition(id, start, end) {
     let obj = document.getElementById(id);
@@ -2012,19 +2143,19 @@ function setPosition(id, start, end) {
 }
 
 /**
- * Отслеживаем нажатие клавиш
- * Alt + u - подпись в консоли
- * Alt + q - подпись во всплывающем окне
- * Ctrl + * - включение/выключение логирования
- * e.shiftKey, e.ctrlKey и e.altKey - отслеживание нажатия соответствующих клавиш
+ * Track key presses
+ * Alt + u - console signature
+ * Alt + q - signature in a pop-up window
+ * Ctrl + * - enable/disable logging
+ * e.shiftKey, e.ctrlKey, and e.altKey - track the corresponding key presses
  * @param e
  */
 function keyCheck (e) {
     if (e.altKey && e.keyCode === 85) signature();
     else if (e.altKey && e.keyCode === 81) alert(image+text+copy);
     else if (e.ctrlKey && e.keyCode === 106) {
-        // переключение состояния логирования
-        // сохраняем состояние в куки
+        // Switch the logging state
+        // Save the state in a cookie
         if (loggen) {
             console.log("JavaScript log "+"%c"+"OFF\n%cTo enable logging, press the key combination \"Ctrl+*\"", "color: #cf1313; font-weight: bold", CSS_Style.orange);
             loggen = false;
@@ -2042,15 +2173,15 @@ function keyCheck (e) {
 }
 
 /**
- * Показать или спрятать объект на странице
- * @param id - ID блока
- * @param type - что сделать с блоком: hide - спрятать, show - показать, по умолчанию или toggle - определить состояние и в зависимости от этого спрятать или показать
- * @param time - время анимации в миллисекундах, может принимать значения "slow" и "fast"
+ * Show or hide an object on the page
+ * @param id - block ID
+ * @param type - action for the block: hide - hide, show - show, default or toggle - determine the current state and hide or show accordingly
+ * @param time - animation duration in milliseconds; can be "slow" or "fast"
  * @constructor
  */
 function ShowHide (id, type, time) {
-    let use_json = false;   // использовать функции библиотеки JQuery
-    let use_slide = true;   // использовать эффект проявления (при использовании библиотеки JQuery)
+    let use_json = false;   // use jQuery library functions
+    let use_slide = true;   // use the slide effect (when using the jQuery library)
     if (!type || (type !== 'hide' && type !== 'show')) type = 'toggle';
     if (!time) time = "slow";
     if (loggen) console.log("ShowHide: %c"+id+" => "+type, CSS_Style.green);
@@ -2073,15 +2204,16 @@ function ShowHide (id, type, time) {
                 else document.getElementById(id).style.display = 'none';
             }
         }
-        // небольшой костыль для того, чтобы продолжал работать после перезагрузки меню по AJAX
+        // Small workaround to keep this working after reloading the menu via AJAX
         if (show_hide.count > 2) send_status = false;
         show_hide['id'] = id;
         show_hide['type'] = type;
     }
+    return false;
 }
 
 /**
- * Генерация ключа
+ * Generate a key
  * @returns {*}
  */
 function getKeyDay() {
@@ -2095,7 +2227,7 @@ function getKeyDay() {
 }
 
 /**
- * Смена раскладки клавиатуры с латиницы на кириллицу
+ * Change the keyboard layout from Latin to Cyrillic
  * @param str
  * @returns {*}
  * @constructor
@@ -2119,7 +2251,7 @@ function changeKeyboard ( str ) {
 }
 
 /**
- * Функции для расчёта MD5
+ * Functions for calculating MD5
  * @param d
  * @returns {string}
  * @constructor
@@ -2186,10 +2318,10 @@ function bit_rol(d, _) {
 addEventListener("keyup", keyCheck);
 
 /**
- * Обновление страницы при нажатии кнопок "назад/вперёд"
- * Отработка изменения истории
+ * Update the page when the "back/forward" buttons are pressed
+ * Handle history changes
  */
-window.onpopstate = function(){
+window.addEventListener('popstate', function () {
     if (loggen) {
         console.group("backHistory");
         console.time("backHistory");
@@ -2211,11 +2343,11 @@ window.onpopstate = function(){
     }
     switch (func) {
         case "getPageID":
-            no_history = 1; // не записывать переход в историю
+            no_history = 1; // do not record the navigation in history
             getPageURL(url, data.content_id);
             break;
         case "getPageURL":
-            no_history = 1; // не записывать переход в историю
+            no_history = 1; // do not record the navigation in history
             getPageURL(data.page_id, data.content_id);
             break;
         case "sendForm":
@@ -2224,13 +2356,13 @@ window.onpopstate = function(){
             getPageURL(url, data.content_id);
             break;
     }
-};
+});
 
 /**
- * Скрипты, вызываемые после загрузки страницы
+ * Scripts called after the page loads
  */
 window.onload = function () {
-    signature();    // Шутка. Подпись ;)
-    checkLog();     // Проверка состояния логирования
-    getLanguage();  // Подключение языковых файлов
+    signature();    // A little joke. Signature ;)
+    checkLog();     // Check logging state
+    getLanguage();  // Include language files
 };

@@ -2,7 +2,7 @@
  * JavaScript functions
  * @author: Yuri Frantsevich (FYN)
  * Email: frantsevich@gmail.com | fyn@tut.by
- * Version: 3.1.2
+ * Version: 3.2.0
  */
 //  +---------------------------------------+
 //  |                Описание               |
@@ -54,6 +54,7 @@ let language            = [];                   // языковой массив
 let lang_use            = 'en';                 // используемый язык
 let lang_key            = '';
 let send_status         = false;                // статус отправки данных
+let response_handlers   = {};
 
 // стилевое оформление консоли
 let CSS_Style                 = {
@@ -297,6 +298,7 @@ function Loader(stop) {
  */
 function showAlert (text, time, style) {
     if (!style) style = 'alert';
+    if (!/^[A-Za-z0-9_-]+$/.test(style)) style = 'alert';
     if (!time) time = animation_time;
     if (loggen) {
         console.group("showAlert");
@@ -307,7 +309,7 @@ function showAlert (text, time, style) {
     }
     let div = document.createElement('div');
     div.className = style;
-    div.innerHTML = text;
+    div.textContent = text;
     document.body.appendChild(div);
     setTimeout(function() {
         div.parentNode.removeChild(div);
@@ -320,9 +322,57 @@ function showAlert (text, time, style) {
     return false;
 }
 
+function registerResponseHandler(name, handler) {
+    if (typeof name !== 'string' || typeof handler !== 'function') return false;
+    response_handlers[name] = handler;
+    return true;
+}
+
+function runResponseHandler(script) {
+    if (!script || typeof script.function !== 'string') return false;
+    let handler = response_handlers[script.function];
+    if (typeof handler !== 'function') return false;
+    let args = Array.isArray(script.args) ? script.args : [];
+    setTimeout(function () {
+        handler.apply(null, args);
+    }, animation_time / 5);
+    return true;
+}
+
+function getSafeNavigationUrl(value) {
+    try {
+        let url = new URL(value, window.location.origin);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+    }
+    catch (error) {
+        return null;
+    }
+}
+
+function getSafeScriptUrl(value) {
+    let url = getSafeNavigationUrl(value);
+    return url && new URL(url).origin === window.location.origin ? url : null;
+}
+
+function setResponseContent(element, value) {
+    let content = value == null ? '' : String(value);
+    let sanitized = window.DOMPurify ? window.DOMPurify.sanitize(content) : null;
+    if (element.jquery) {
+        if (sanitized !== null) element.html(sanitized);
+        else element.text(content);
+    }
+    else if (sanitized !== null) element.innerHTML = sanitized;
+    else element.textContent = content;
+}
+
+function escapeHtml(value) {
+    let element = document.createElement('div');
+    element.textContent = value == null ? '' : String(value);
+    return element.innerHTML;
+}
+
 /**
  * AJAX функция передачи данных из формы по ID
- * Выполняется проверка полноты и правильности заполнения
  * Все параметры по умолчанию прописываются в блоке "Глобальные переменные"
  *
  * Пример:
@@ -512,6 +562,7 @@ function sendForm (name, id, back, url, method, type) {
                         let txt = (data.alert)?data.alert:'ERROR return from server!';
                         showAlert(txt, (animation_time*2));
                     }
+                    back = false;
                 }
                 // с сервера пришло информационное сообщение
                 else if (data.alert) {
@@ -520,20 +571,28 @@ function sendForm (name, id, back, url, method, type) {
                 }
                 // пришло перенаправление на URL
                 if (data.url) {
-                    if (loggen) console.info("Go to URL: "+data.url);
-                    document.location.href = data.url;
-                    return true;
+                    let safeUrl = getSafeNavigationUrl(data.url);
+                    if (safeUrl) {
+                        if (loggen) console.info("Go to URL: "+safeUrl);
+                        document.location.href = safeUrl;
+                        return true;
+                    }
+                    if (loggen) console.warn("Unsafe redirect URL rejected");
                 }
                 // с сервера пришёл HTML-текст
                 if (data.html) {
                     if (output) {
                         if (loggen) console.log("Write HTML from server");
-                        document.getElementById(id).innerHTML = data.html;
+                        setResponseContent(document.getElementById(id), data.html);
                     }
+                }
+                if (data.show_hide && data.sh_type) {
+                    if (loggen) console.info("ShowHide "+data.show_hide);
+                    ShowHide(data.show_hide, data.sh_type);
                 }
                 // перебор переданного массива (объекта) данных
                 for (let key in data) {
-                    if (key === 'error' || key === 'script' || key === 'alert' || key === 'set_url' || key === 'no_error' || key === 'html' || key === 'title' || key === 'error_field') continue;
+                    if (key === 'error' || key === 'script' || key === 'alert' || key === 'set_url' || key === 'show_hide' || key === 'sh_type' || key === 'no_error' || key === 'html' || key === 'title' || key === 'error_field') continue;
                     if (!document.getElementById(key)) {
                         if (loggen) console.warn("ID %c"+key+"%c not found!", CSS_Style.orange, CSS_Style.clear);
                         continue;
@@ -552,7 +611,7 @@ function sendForm (name, id, back, url, method, type) {
                         let type = new_obj.get(0).tagName.toLowerCase();
                         new_obj.fadeOut("slow", function () {
                             if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                            else new_obj.html(value);
+                            else setResponseContent(new_obj, value);
                             new_obj.fadeIn("slow");
                         });
                     }
@@ -561,7 +620,7 @@ function sendForm (name, id, back, url, method, type) {
                         if (loggen) console.log("Set static text for ID: %c" + key, CSS_Style.green);
                         let type = new_obj.get(0).tagName.toLowerCase();
                         if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                        else new_obj.html(value);
+                        else setResponseContent(new_obj, value);
                     }
                 }
                 if (data.set_url) newurldata = data.set_url;
@@ -576,6 +635,7 @@ function sendForm (name, id, back, url, method, type) {
                     let info = fld.offset();
                     fld.focus().addClass("error_field");
                     setTimeout(function () {window.scrollTo(info['left'], (info['top']-50))}, 500);
+                    back = false;
                 }
                 if (data.error_fields) {
                     let counter = 0;
@@ -590,12 +650,14 @@ function sendForm (name, id, back, url, method, type) {
                             }, 500);
                         }
                     }
+                    back = false;
                 }
             }
         }).done(function () {
             send_status = true;
             // всё отработало хорошо
-            state = { 'page_id': name, 'content_id': id, 'function': 'sendForm', 'url': url, 'data': [] };
+            state = { 'page_id': name, 'content_id': id, 'function': 'sendForm', 'url': url };
+            //state = { 'page_id': name, 'content_id': id, 'function': 'sendForm', 'url': url, 'data': dt };
             if (loggen) {
                 console.log("%cSave to browser history:", CSS_Style.h3);
                 console.table({'state': state});
@@ -603,17 +665,13 @@ function sendForm (name, id, back, url, method, type) {
             }
             if (!no_history) window.history.pushState(state, title, newurldata);
             else no_history = 0;
-            if (run_script) {
-                let param =  'setTimeout(function () { '+script.function+ '('+script.arg+'); }, '+animation_time/5+');'
-                if (loggen) console.log("%cRun new script: %c "+param, CSS_Style.green, CSS_Style.orange);
-                let run = new Function(param);
-                run();
-            }
+            if (run_script) runResponseHandler(script);
             // снимаем заставку
             Loader(true);
             if (loggen) {
                 console.log("%cSend status: %c"+send_status, CSS_Style.green, CSS_Style.red);
                 console.log("%cSUCCESS", CSS_Style.green);
+                console.log("%cReturn %c" + back, CSS_Style.green, CSS_Style.red);
                 console.timeEnd("sendForm");
                 console.groupEnd();
             }
@@ -621,8 +679,10 @@ function sendForm (name, id, back, url, method, type) {
             // произошла ошибка в работе
             // снимаем заставку
             Loader(true);
+            back = false;
             if (loggen) {
                 console.error("FAIL");
+                console.log("%cReturn %c" + back, CSS_Style.green, CSS_Style.red);
                 console.timeEnd("sendForm");
                 console.groupEnd();
             }
@@ -633,12 +693,13 @@ function sendForm (name, id, back, url, method, type) {
     else {
         // снимаем заставку
         Loader(true);
+        back = error;
         if (loggen) {
             console.error("Check form ERROR!");
+            console.log("%cReturn %c" + back, CSS_Style.green, CSS_Style.red);
             console.timeEnd("sendForm");
             console.groupEnd();
         }
-        back = error;
     }
     return back;
 }
@@ -745,9 +806,49 @@ function getPageID (name, id, method, type) {
     if (!method) method = default_method;
     // определяем тип данных
     if (!type) type = default_type;
+    let reg = /\#/;
+    if (document.getElementById('check_menu')) {
+        let check = document.getElementById('check_menu');
+        if (check.checked) check.checked = false;
+    }
+    if (reg.test(newurldata)) {
+        reg = /([^\#]+)\#([^\#\?\&]+)/;
+        let anchor = newurldata.replace(reg, "$2");
+        console.log(newurldata + " == %c" + anchor, CSS_Style.red);
+        let anchorElement = document.getElementById(anchor);
+        if (anchorElement) {
+            console.log("OK ID - "+anchor);
+            anchorElement.scrollIntoView({
+                behavior: 'smooth',
+            });
+        }
+        else if (anchor == 'top') {
+            window.scrollTo({top: 0, left: 0, behavior: "smooth"});
+        }
+        else if (document.getElementsByName(anchor)[0]) {
+            console.log("OK Name - "+anchor);
+            let topobj = document.getElementById('text');
+            let styles = window.getComputedStyle(topobj);
+            reg = /px/;
+            let koe = styles.getPropertyValue('padding-top').replace(reg, "");
+            let obj = document.getElementsByName(anchor)[0];
+            let coordinate = obj.getBoundingClientRect();
+            let scrollY = window.scrollY;
+            let space = $('#block00s').height();
+            let goto = coordinate.y - koe + space + scrollY;
+            window.scrollTo({left: 0, top: goto, behavior: "smooth"});
+        }
+        else console.log("FALSE - "+anchor);
+        Loader(true);
+        if (loggen) {
+            console.timeEnd("getPageID");
+            console.groupEnd();
+        }
+        return false;
+    }
     let urldata = '';
+    reg = /^(.+)?(\/?\?.+)$/;
     if (param) {
-        let reg = /^(.+)?(\/?\?.+)$/;
         if (loggen) console.log("Check URL: %c"+newurldata, CSS_Style.blue);
         if (reg.test(newurldata)) urldata = newurldata.replace(reg, "$1$2&" + param);
         else {
@@ -789,9 +890,13 @@ function getPageID (name, id, method, type) {
             }
             // пришло перенаправление на URL
             if (data.url) {
-                if (loggen) console.info("Go to URL: "+data.url);
-                document.location.href = data.url;
-                return true;
+                let safeUrl = getSafeNavigationUrl(data.url);
+                if (safeUrl) {
+                    if (loggen) console.info("Go to URL: "+safeUrl);
+                    document.location.href = safeUrl;
+                    return true;
+                }
+                if (loggen) console.warn("Unsafe redirect URL rejected");
             }
             // с сервера пришёл HTML-текст
             if (data.html) {
@@ -800,13 +905,13 @@ function getPageID (name, id, method, type) {
                 if (use_animation) {
                     if (loggen) console.log("Set animation text for %c"+id, CSS_Style.green);
                     new_obj.fadeOut("slow", function () {
-                        new_obj.html(data.html);
+                        setResponseContent(new_obj, data.html);
                         new_obj.fadeIn("slow");
                     });
                 }
                 else {
                     if (loggen) console.log("Set static text for %c"+id, CSS_Style.green);
-                    new_obj.html( data.html );
+                    setResponseContent(new_obj, data.html);
                 }
             }
             // с сервера пришёл заголовок документа
@@ -834,7 +939,7 @@ function getPageID (name, id, method, type) {
                     let type = new_obj.get(0).tagName.toLowerCase();
                     new_obj.fadeOut("slow", function () {
                         if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                        else new_obj.html(value);
+                        else setResponseContent(new_obj, value);
                         new_obj.fadeIn("slow");
                     });
                 }
@@ -843,7 +948,7 @@ function getPageID (name, id, method, type) {
                     if (loggen) console.log("Set static text for ID: %c" + key, CSS_Style.green);
                     let type = new_obj.get(0).tagName.toLowerCase();
                     if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                    else new_obj.html(value);
+                    else setResponseContent(new_obj, value);
                     if (!document.getElementById(key)) {
                         if (loggen) console.warn("Not found ID: %с" + key, CSS_Style.red);
                     }
@@ -869,12 +974,7 @@ function getPageID (name, id, method, type) {
         }
         if (!no_history) window.history.pushState(state, title, newurldata);
         else no_history = 0;
-        if (run_script) {
-            let param =  'setTimeout(function () { '+script.function+ '('+script.arg+'); }, '+animation_time/5+');'
-            if (loggen) console.log("%cRun new script: %c "+param, CSS_Style.green, CSS_Style.orange);
-            let run = new Function(param);
-            run();
-        }
+        if (run_script) runResponseHandler(script);
         if (loggen) {
             console.log("%cSend status: %c"+send_status, CSS_Style.green, CSS_Style.red);
             console.log("%cSUCCESS", CSS_Style.green);
@@ -937,7 +1037,7 @@ function getPageURL (url, id, method, type) {
     // если к url надо добавить ещё какие либо дополнительные параметры,
     // указываем их в переменной param
     // например: let param = 'param_1=value_1&param_2=value_2';
-    let param = 'js='+getKeyDay();
+    let param = 'js=1';
     if (loggen) {
         console.group("getPageURL");
         console.time("getPageURL");
@@ -1023,9 +1123,13 @@ function getPageURL (url, id, method, type) {
             }
             // пришло перенаправление на URL
             if (data.url) {
-                if (loggen) console.info("Go to URL: "+data.url);
-                document.location.href = data.url;
-                return true;
+                let safeUrl = getSafeNavigationUrl(data.url);
+                if (safeUrl) {
+                    if (loggen) console.info("Go to URL: "+safeUrl);
+                    document.location.href = safeUrl;
+                    return true;
+                }
+                if (loggen) console.warn("Unsafe redirect URL rejected");
             }
             // с сервера пришёл HTML-текст
             if (data.html) {
@@ -1034,13 +1138,13 @@ function getPageURL (url, id, method, type) {
                 if (use_animation) {
                     if (loggen) console.log("Set animation text for %c"+id, CSS_Style.green);
                     new_obj.fadeOut("slow", function () {
-                        new_obj.html(data.html);
+                        setResponseContent(new_obj, data.html);
                         new_obj.fadeIn("slow");
                     });
                 }
                 else {
                     if (loggen) console.log("Set static text for %c"+id, CSS_Style.green);
-                    new_obj.html( data.html );
+                    setResponseContent(new_obj, data.html);
                 }
             }
             // с сервера пришёл заголовок документа
@@ -1063,7 +1167,7 @@ function getPageURL (url, id, method, type) {
                     let type = new_obj.get(0).tagName.toLowerCase();
                     new_obj.fadeOut("slow", function () {
                         if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                        else new_obj.html(value);
+                        else setResponseContent(new_obj, value);
                         new_obj.fadeIn("slow");
                     });
                 }
@@ -1072,7 +1176,7 @@ function getPageURL (url, id, method, type) {
                     if (loggen) console.log("Set static text for ID: %c" + key, CSS_Style.green);
                     let type = new_obj.get(0).tagName.toLowerCase();
                     if (type === "textarea" || type === "input" || type === "hidden") new_obj.val(value);
-                    else new_obj.html(value);
+                    else setResponseContent(new_obj, value);
                 }
             }
             if (data.set_url) newurldata = data.set_url;
@@ -1093,12 +1197,7 @@ function getPageURL (url, id, method, type) {
         if (!no_history) window.history.pushState(state, title, newurldata);
         else no_history = 0;// всё отработало хорошо
         if (loggen) console.log("getPageURL() SUCCESS");// снимаем заставку
-        if (run_script) {
-            let param =  'setTimeout(function () { '+script.function+ '('+script.arg+'); }, '+animation_time/5+');'
-            if (loggen) console.log("%cRun new script: %c "+param, CSS_Style.green, CSS_Style.orange);
-            let run = new Function(param);
-            run();
-        }
+        if (run_script) runResponseHandler(script);
         Loader(true);
         if (loggen) {
             console.log("%cSend status: %c"+send_status, CSS_Style.green, CSS_Style.red);
@@ -1174,8 +1273,13 @@ function goToURL(id, blank, options) {
         console.timeEnd("goToURL");
         console.groupEnd();
     }
-    if (blank) window.open(url, '_blank', options);
-    else document.location.href = url;
+    let safeUrl = getSafeNavigationUrl(url);
+    if (!safeUrl) return false;
+    if (blank) {
+        let opened = window.open(safeUrl, '_blank', options);
+        if (opened) opened.opener = null;
+    }
+    else document.location.href = safeUrl;
 }
 
 /**
@@ -1189,8 +1293,10 @@ function includeJS(url) {
         console.time("includeJS");
         console.log("Included URL: %c" + url, CSS_Style.blue);
     }
+    let safeUrl = getSafeScriptUrl(url);
+    if (!safeUrl) return false;
     let script = document.createElement('script');
-    script.src = url;
+    script.src = safeUrl;
     document.getElementsByTagName('head')[0].appendChild(script);
     if (loggen) {
         console.log("%cDone", CSS_Style.orange);
@@ -1612,10 +1718,20 @@ function ObjLen (obj) {
  * Использование: $("#block_id").center();
  * @returns {jQuery}
  */
+/*
 jQuery.fn.center = function () {
     this.css("position", "absolute");
     this.css("top", (($(window).height() - this.outerHeight()) / 2) + $(window).scrollTop() + "px");
     this.css("left", (($(window).width() - this.outerWidth()) / 2) + $(window).scrollLeft() + "px");
+    return this;
+}
+*/
+jQuery.fn.center = function () {
+    this.css("position", "relative");
+    this.css("display", "flex");
+    this.css("display", "-webkit-flex");
+    this.css("justify-content", "center");
+    this.css("top", "-50px");
     return this;
 }
 
@@ -1708,11 +1824,11 @@ function MyConfirm (text, title, func) {
         "}";
     let content = "<div id='confirm_dialog' class='confirm_bg'>" +
         "<div class='confirm'>" +
-        "<div class='confirm_title'><p>" + title + "</p></div>" +
-        "<div class='confirm_text'>" + text + "</div>" +
+        "<div class='confirm_title'><p>" + escapeHtml(title) + "</p></div>" +
+        "<div class='confirm_text'>" + escapeHtml(text) + "</div>" +
         "<div class='confirm_buttons'>" +
-        "<button id='OkAction' class='confirm_button button_ok'>" + language[lang_use]['confirm_ok'] + "</button>" +
-        "<button id='CancelAction' class='confirm_button button_cancel'>" + language[lang_use]['confirm_cancel'] + "</button>" +
+        "<button id='OkAction' class='confirm_button button_ok'>" + escapeHtml(language[lang_use]['confirm_ok']) + "</button>" +
+        "<button id='CancelAction' class='confirm_button button_cancel'>" + escapeHtml(language[lang_use]['confirm_cancel']) + "</button>" +
         "</div>" +
         "</div>" +
         "</div>";
@@ -1725,7 +1841,7 @@ function MyConfirm (text, title, func) {
             $(this).remove();
         });
         if (loggen) console.log("Go to func");
-        func();
+        if (typeof func === 'function') func();
     });
     $('#CancelAction').click(function () {
         if (loggen) console.log("Return: %FALSE", CSS_Style.red);
@@ -1759,7 +1875,14 @@ function checkBrowser() {
     let vendorName = winNav.vendor;
     if (this.isIE && !winNav.userAgent.indexOf("rv:")) this.isIE = false;
     else if (!this.isIE && !this.isChrome && !this.isChromium && !this.isFF && !this.isIEedge && !this.isSafari && !this.isOpera && winNav.userAgent.indexOf("rv:")) this.isIE = true;
-    if (this.isChrome !== null && typeof this.isChrome !== "undefined" && vendorName === "Google Inc." && this.isOpera === false && this.isIEedge === false) this.isChrome = true;
+    if (this.isChrome !== null && typeof this.isChrome !== "undefined" && vendorName === "Google Inc." && this.isOpera === false && this.isIEedge === false) {
+        if (isWithChromePDFReader()) {
+            this.isChrome = true;
+        } else {
+            this.isChrome = false;
+            this.isChromium = true;
+        }
+    }
     this.isMS = (this.isIE || this.isIEedge || this.isMSIE)?true:false; // Продукт от Microsoft
     if (this.isOpera) {
         this.browser = 'Opera';
@@ -1785,11 +1908,26 @@ function checkBrowser() {
         this.browser = 'Chrome';
         this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("Chrome/")+7),4);
     }
+    else if (this.isChromium) {
+        this.browser = 'Chromium';
+        this.version = winNav.userAgent.substr((winNav.userAgent.indexOf("Chrome/")+7),4);
+    }
     else if (this.isSafari) {
         this.browser = 'Safari';
         this.version = 4;
     }
     return this;
+}
+
+/**
+ * Вспомогательная функция для определения Chromium
+ * @return {boolean}
+ */
+function isWithChromePDFReader() {
+    for (let i = 0; i < window.navigator.plugins.length; i++) {
+        if (window.navigator.plugins[i].name == 'Chrome PDF Viewer') return true;
+    }
+    return false;
 }
 
 /**
@@ -2046,7 +2184,7 @@ function keyCheck (e) {
  * Показать или спрятать объект на странице
  * @param id - ID блока
  * @param type - что сделать с блоком: hide - спрятать, show - показать, по умолчанию или toggle - определить состояние и в зависимости от этого спрятать или показать
- * @param time - время анимации в миллисекундах, может принимать значения "slow" и "fast"
+ * @param time - время анимации в милисекундах, может принимать значения "slow" и "fast"
  * @constructor
  */
 function ShowHide (id, type, time) {
@@ -2066,13 +2204,12 @@ function ShowHide (id, type, time) {
         }
         else {
             if (document.getElementById(id)) {
-                if (type === 'toggle') {
-                    if (type === 'show') document.getElementById(id).style.display = 'block';
-                    else if (type === 'toggle') {
-                        if (getComputedStyle(document.getElementById(id)).display == 'none') document.getElementById(id).style.display = 'block';
-                        else document.getElementById(id).style.display = 'none';
-                    }
+                if (type === 'show') document.getElementById(id).style.display = 'block';
+                else if (type === 'toggle') {
+                    if (getComputedStyle(document.getElementById(id)).display == 'none') document.getElementById(id).style.display = 'block';
                     else document.getElementById(id).style.display = 'none';
+                }
+                else document.getElementById(id).style.display = 'none';
             }
         }
         // небольшой костыль для того, чтобы продолжал работать после перезагрузки меню по AJAX
@@ -2080,6 +2217,7 @@ function ShowHide (id, type, time) {
         show_hide['id'] = id;
         show_hide['type'] = type;
     }
+    return false;
 }
 
 /**
@@ -2191,7 +2329,7 @@ addEventListener("keyup", keyCheck);
  * Обновление страницы при нажатии кнопок "назад/вперёд"
  * Отработка изменения истории
  */
-window.onpopstate = function(){
+window.addEventListener('popstate', function () {
     if (loggen) {
         console.group("backHistory");
         console.time("backHistory");
@@ -2226,7 +2364,7 @@ window.onpopstate = function(){
             getPageURL(url, data.content_id);
             break;
     }
-};
+});
 
 /**
  * Скрипты, вызываемые после загрузки страницы
